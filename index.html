@@ -1,161 +1,289 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Doodle Relay</title>
-<link rel="stylesheet" href="styles/main.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scribble Chain</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-<div id="app">
 
-  <header id="topbar">
-    <div class="brand" id="brand">Doodle<span>Relay</span></div>
-    <div class="topbar-right">
-      <span id="auth-status" class="auth-status"></span>
-      <button id="auth-btn" class="btn btn-ghost btn-sm">Sign in</button>
+  <!-- ═══════════════════════ SCREENS ═══════════════════════ -->
+
+  <!-- LANDING -->
+  <div id="screen-landing" class="screen active">
+    <div class="landing-bg">
+      <div class="bg-blob blob1"></div>
+      <div class="bg-blob blob2"></div>
+      <div class="bg-blob blob3"></div>
     </div>
-  </header>
-
-  <main id="screens">
-
-    <section id="screen-home" class="screen active">
-      <div class="home-card">
-        <h1 class="home-title">Doodle<span>Relay</span></h1>
-        <p class="home-sub">Write it. Draw it. Watch it fall apart.</p>
-
-        <div class="identity">
-          <button id="avatar-pick" class="avatar-big" title="Change avatar">🐱</button>
-          <input id="name-input" class="input" maxlength="20" placeholder="Your name">
-        </div>
-
-        <div class="home-actions">
-          <button id="create-btn" class="btn btn-primary btn-lg">Create room</button>
-          <div class="join-row">
-            <input id="code-input" class="input code-input" maxlength="6" placeholder="CODE">
-            <button id="join-btn" class="btn btn-secondary">Join</button>
-          </div>
-          <label class="checkbox-row">
-            <input type="checkbox" id="public-toggle"> Make room public
-          </label>
-        </div>
-
-        <div class="public-rooms">
-          <div class="public-head">
-            <span>Public rooms</span>
-            <button id="refresh-public" class="btn btn-ghost btn-xs">Refresh</button>
-          </div>
-          <div id="public-list" class="public-list"></div>
-        </div>
+    <div class="landing-content">
+      <div class="logo-wrap">
+        <span class="logo-icon">✏️</span>
+        <h1 class="logo-text">Scribble<span class="logo-accent">Chain</span></h1>
+        <p class="logo-sub">Draw. Describe. Chaos ensues.</p>
       </div>
-    </section>
+      <div class="landing-actions">
+        <button class="btn btn-primary btn-xl" id="btn-create-room">Create Room</button>
+        <button class="btn btn-secondary btn-xl" id="btn-join-room">Join Room</button>
+      </div>
+      <div id="join-form" class="join-form hidden">
+        <input type="text" id="join-code-input" class="input-code" placeholder="ABCD" maxlength="6" spellcheck="false" autocomplete="off" />
+        <button class="btn btn-primary" id="btn-join-confirm">Join →</button>
+      </div>
+      <div id="name-form" class="name-form hidden">
+        <p class="form-label">What's your name?</p>
+        <input type="text" id="name-input" class="input-name" placeholder="Your nickname" maxlength="20" autocomplete="off" />
+        <button class="btn btn-primary" id="btn-name-confirm">Let's go →</button>
+      </div>
+    </div>
+  </div>
 
-    <section id="screen-lobby" class="screen">
-      <div class="lobby-grid">
-        <div class="panel players-panel">
-          <div class="panel-head">
-            <span>Players (<span id="player-count">0</span>)</span>
-            <span class="room-code" id="lobby-code"></span>
+  <!-- LOBBY -->
+  <div id="screen-lobby" class="screen">
+    <div class="lobby-layout">
+      <div class="lobby-main">
+        <div class="room-header">
+          <div class="room-code-wrap">
+            <span class="room-code-label">Room Code</span>
+            <span id="lobby-room-code" class="room-code-display">----</span>
+            <button class="btn btn-ghost btn-sm" id="btn-copy-code" title="Copy code">📋</button>
           </div>
-          <div id="player-list" class="player-list"></div>
-          <div class="lobby-room-actions">
-            <button id="copy-link" class="btn btn-ghost btn-sm">Copy invite</button>
-          </div>
+          <button class="btn btn-danger btn-sm" id="btn-leave-lobby">Leave</button>
         </div>
 
-        <div class="panel center-panel">
-          <div id="host-settings" class="settings-wrap"></div>
-          <div class="lobby-cta">
-            <button id="ready-btn" class="btn btn-secondary btn-lg">Ready</button>
-            <button id="start-btn" class="btn btn-primary btn-lg" disabled>Start game</button>
-            <button id="leave-btn" class="btn btn-ghost">Leave</button>
-          </div>
-        </div>
+        <div class="player-grid" id="player-list"></div>
 
-        <div class="panel chat-panel">
-          <div class="panel-head"><span>Chat</span></div>
-          <div id="chat-log" class="chat-log"></div>
+        <div id="lobby-chat" class="chat-box">
+          <div class="chat-messages" id="lobby-chat-messages"></div>
           <div class="chat-input-row">
-            <input id="chat-input" class="input" maxlength="200" placeholder="Say something">
-            <button id="chat-send" class="btn btn-secondary btn-sm">Send</button>
+            <input type="text" id="lobby-chat-input" class="chat-input" placeholder="Say something…" maxlength="200" />
+            <button class="btn btn-primary btn-sm" id="btn-lobby-chat-send">Send</button>
           </div>
         </div>
       </div>
-    </section>
 
-    <section id="screen-game" class="screen">
-      <div class="game-top">
-        <div class="phase-label" id="phase-label">Get ready</div>
-        <div class="timer" id="timer">--</div>
-        <div class="round-label" id="round-label"></div>
+      <div class="lobby-sidebar">
+        <div class="settings-panel" id="settings-panel">
+          <h3 class="settings-title">Settings</h3>
+          <div class="setting-row">
+            <label>Prompt Timer</label>
+            <select id="setting-prompt-timer" class="select">
+              <option value="30">30s</option>
+              <option value="60" selected>60s</option>
+              <option value="90">90s</option>
+              <option value="120">120s</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Drawing Timer</label>
+            <select id="setting-draw-timer" class="select">
+              <option value="60">60s</option>
+              <option value="90" selected>90s</option>
+              <option value="120">120s</option>
+              <option value="180">3 min</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Describe Timer</label>
+            <select id="setting-desc-timer" class="select">
+              <option value="30">30s</option>
+              <option value="60" selected>60s</option>
+              <option value="90">90s</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Profanity Filter</label>
+            <label class="toggle">
+              <input type="checkbox" id="setting-profanity" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-lg w-full" id="btn-start-game" disabled>
+          Start Game
+        </button>
+        <p class="start-hint" id="start-hint">Waiting for host to start…</p>
       </div>
+    </div>
+  </div>
 
-      <div id="phase-prompt" class="phase-view">
-        <h2 class="phase-title">Write a prompt</h2>
-        <p class="phase-hint">Something fun for the next person to draw.</p>
-        <input id="prompt-input" class="input prompt-input" maxlength="120" placeholder="Type your prompt">
-        <button id="prompt-submit" class="btn btn-primary btn-lg">Submit</button>
-        <button id="prompt-random" class="btn btn-ghost btn-sm">Random prompt</button>
-      </div>
-
-      <div id="phase-drawing" class="phase-view">
-        <div class="draw-source" id="draw-source"></div>
-        <div id="canvas-wrap" class="canvas-wrap"></div>
-        <div id="toolbar" class="toolbar"></div>
-        <button id="drawing-submit" class="btn btn-primary btn-lg">Submit drawing</button>
-      </div>
-
-      <div id="phase-description" class="phase-view">
-        <h2 class="phase-title">What is this?</h2>
-        <div id="desc-image" class="desc-image"></div>
-        <input id="desc-input" class="input prompt-input" maxlength="120" placeholder="Describe what you see">
-        <button id="desc-submit" class="btn btn-primary btn-lg">Submit</button>
-      </div>
-
-      <div id="phase-waiting" class="phase-view">
-        <div class="spinner"></div>
-        <h2 class="phase-title">Waiting for others</h2>
-        <div id="waiting-list" class="waiting-list"></div>
-      </div>
-    </section>
-
-    <section id="screen-reveal" class="screen">
-      <div class="reveal-top">
-        <div class="reveal-title">The results</div>
-        <div class="reveal-nav">
-          <button id="reveal-prev" class="btn btn-ghost btn-sm">Prev</button>
-          <span id="reveal-pos" class="reveal-pos"></span>
-          <button id="reveal-next" class="btn btn-ghost btn-sm">Next</button>
+  <!-- PROMPT WRITING -->
+  <div id="screen-prompt" class="screen">
+    <div class="phase-layout">
+      <div class="phase-header">
+        <div class="phase-badge">✍️ Write a Prompt</div>
+        <div class="timer-wrap">
+          <svg class="timer-ring" viewBox="0 0 44 44">
+            <circle class="timer-track" cx="22" cy="22" r="18"/>
+            <circle class="timer-progress" id="timer-ring-prompt" cx="22" cy="22" r="18"/>
+          </svg>
+          <span class="timer-text" id="timer-display-prompt">60</span>
         </div>
       </div>
-      <div id="reveal-stage" class="reveal-stage"></div>
-      <div class="reveal-controls">
-        <button id="reveal-step" class="btn btn-primary">Next step</button>
-        <button id="reveal-auto" class="btn btn-secondary">Auto play</button>
-        <button id="reveal-full" class="btn btn-ghost btn-sm">Fullscreen</button>
-        <button id="reveal-home" class="btn btn-ghost btn-sm">Back to lobby</button>
+      <div class="phase-body center-col">
+        <p class="phase-instruction" id="prompt-theme-hint">Write anything you can imagine!</p>
+        <textarea id="prompt-textarea" class="prompt-textarea" placeholder="A giraffe learning to skateboard…" maxlength="120" rows="3"></textarea>
+        <div class="char-count"><span id="prompt-char-count">0</span>/120</div>
+        <button class="btn btn-primary btn-lg" id="btn-submit-prompt">Submit Prompt ✓</button>
       </div>
-    </section>
+      <div class="waiting-panel hidden" id="waiting-panel-prompt">
+        <div class="waiting-avatars" id="waiting-avatars-prompt"></div>
+        <p class="waiting-text">Waiting for everyone…</p>
+      </div>
+    </div>
+  </div>
 
-  </main>
+  <!-- DRAWING -->
+  <div id="screen-drawing" class="screen">
+    <div class="drawing-layout">
+      <div class="drawing-header">
+        <div class="phase-badge">🎨 Draw This</div>
+        <div class="draw-prompt-display" id="draw-prompt-display">Loading…</div>
+        <div class="timer-wrap">
+          <svg class="timer-ring" viewBox="0 0 44 44">
+            <circle class="timer-track" cx="22" cy="22" r="18"/>
+            <circle class="timer-progress" id="timer-ring-draw" cx="22" cy="22" r="18"/>
+          </svg>
+          <span class="timer-text" id="timer-display-draw">90</span>
+        </div>
+      </div>
+      <div class="canvas-area">
+        <canvas id="draw-canvas" width="720" height="720"></canvas>
+      </div>
+      <div class="toolbar">
+        <div class="tool-group">
+          <button class="tool-btn active" id="tool-pen" title="Pen">🖊</button>
+          <button class="tool-btn" id="tool-eraser" title="Eraser">🧹</button>
+          <button class="tool-btn" id="tool-fill" title="Fill">🪣</button>
+        </div>
+        <div class="tool-group">
+          <div class="color-swatch-grid" id="color-swatches"></div>
+          <input type="color" id="color-picker" class="color-picker-full" value="#000000" title="Custom color" />
+        </div>
+        <div class="tool-group">
+          <label class="brush-label">Size</label>
+          <input type="range" id="brush-size" min="1" max="60" value="6" class="brush-slider" />
+          <span class="brush-preview-wrap"><canvas id="brush-preview" width="40" height="40"></canvas></span>
+        </div>
+        <div class="tool-group">
+          <button class="tool-btn" id="tool-undo" title="Undo">↩</button>
+          <button class="tool-btn" id="tool-redo" title="Redo">↪</button>
+          <button class="tool-btn danger" id="tool-clear" title="Clear">🗑</button>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-submit-drawing">Done ✓</button>
+      </div>
+      <div class="waiting-panel hidden" id="waiting-panel-draw">
+        <div class="waiting-avatars" id="waiting-avatars-draw"></div>
+        <p class="waiting-text">Waiting for everyone…</p>
+      </div>
+    </div>
+  </div>
 
-  <div id="modal-root"></div>
-  <div id="toasts"></div>
-</div>
+  <!-- DESCRIPTION -->
+  <div id="screen-description" class="screen">
+    <div class="phase-layout">
+      <div class="phase-header">
+        <div class="phase-badge">💬 Describe This Drawing</div>
+        <div class="timer-wrap">
+          <svg class="timer-ring" viewBox="0 0 44 44">
+            <circle class="timer-track" cx="22" cy="22" r="18"/>
+            <circle class="timer-progress" id="timer-ring-desc" cx="22" cy="22" r="18"/>
+          </svg>
+          <span class="timer-text" id="timer-display-desc">60</span>
+        </div>
+      </div>
+      <div class="phase-body">
+        <div class="desc-image-wrap">
+          <img id="desc-image" src="" alt="Drawing to describe" class="desc-image" />
+        </div>
+        <textarea id="desc-textarea" class="prompt-textarea" placeholder="Describe what you see…" maxlength="120" rows="3"></textarea>
+        <div class="char-count"><span id="desc-char-count">0</span>/120</div>
+        <button class="btn btn-primary btn-lg" id="btn-submit-desc">Submit ✓</button>
+      </div>
+      <div class="waiting-panel hidden" id="waiting-panel-desc">
+        <div class="waiting-avatars" id="waiting-avatars-desc"></div>
+        <p class="waiting-text">Waiting for everyone…</p>
+      </div>
+    </div>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="scripts/config.js"></script>
-<script src="scripts/utils.js"></script>
-<script src="scripts/supabase.js"></script>
-<script src="scripts/realtime.js"></script>
-<script src="scripts/chat.js"></script>
-<script src="scripts/canvas.js"></script>
-<script src="scripts/drawing.js"></script>
-<script src="scripts/settings.js"></script>
-<script src="scripts/reveal.js"></script>
-<script src="scripts/room.js"></script>
-<script src="scripts/lobby.js"></script>
-<script src="scripts/game.js"></script>
-<script src="scripts/app.js"></script>
+  <!-- WAITING / TRANSITION -->
+  <div id="screen-waiting" class="screen">
+    <div class="full-center">
+      <div class="spinner-ring"></div>
+      <p class="waiting-big-text" id="waiting-big-text">Collecting submissions…</p>
+    </div>
+  </div>
+
+  <!-- REVEAL -->
+  <div id="screen-reveal" class="screen">
+    <div class="reveal-layout">
+      <div class="reveal-header">
+        <h2 class="reveal-title">📖 The Story</h2>
+        <div class="reveal-chain-nav">
+          <span id="reveal-chain-label" class="reveal-chain-label">Chain 1 / 1</span>
+        </div>
+      </div>
+      <div class="reveal-chain" id="reveal-chain"></div>
+      <div class="reveal-footer">
+        <button class="btn btn-secondary" id="btn-prev-entry">← Prev</button>
+        <button class="btn btn-primary" id="btn-next-entry">Next →</button>
+      </div>
+      <div id="reveal-reactions" class="reaction-bar">
+        <button class="reaction-btn" data-emoji="😂">😂 <span class="rxn-count" id="rxn-laugh">0</span></button>
+        <button class="reaction-btn" data-emoji="😲">😲 <span class="rxn-count" id="rxn-wow">0</span></button>
+        <button class="reaction-btn" data-emoji="❤️">❤️ <span class="rxn-count" id="rxn-heart">0</span></button>
+      </div>
+      <div class="reveal-chat-wrap">
+        <div class="chat-messages" id="reveal-chat-messages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="reveal-chat-input" class="chat-input" placeholder="React…" maxlength="200" />
+          <button class="btn btn-primary btn-sm" id="btn-reveal-chat-send">Send</button>
+        </div>
+      </div>
+      <div id="host-reveal-controls" class="host-controls hidden">
+        <button class="btn btn-secondary btn-sm" id="btn-prev-chain">← Prev Chain</button>
+        <button class="btn btn-primary btn-sm" id="btn-next-chain">Next Chain →</button>
+        <button class="btn btn-primary btn-sm" id="btn-finish-reveal">Finish 🎉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="screen-gameover" class="screen">
+    <div class="full-center gameover-content">
+      <h2 class="gameover-title">🎉 That's a Wrap!</h2>
+      <div class="scoreboard" id="scoreboard"></div>
+      <button class="btn btn-primary btn-lg" id="btn-play-again">Play Again</button>
+      <button class="btn btn-secondary btn-lg" id="btn-back-lobby">Back to Lobby</button>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+  <!-- FLOATING REACTIONS -->
+  <div id="float-reactions"></div>
+
+  <!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="scripts/config.js"></script>
+  <script src="scripts/utils.js"></script>
+  <script src="scripts/supabase.js"></script>
+  <script src="scripts/realtime.js"></script>
+  <script src="scripts/canvas.js"></script>
+  <script src="scripts/drawing.js"></script>
+  <script src="scripts/chat.js"></script>
+  <script src="scripts/settings.js"></script>
+  <script src="scripts/room.js"></script>
+  <script src="scripts/lobby.js"></script>
+  <script src="scripts/game.js"></script>
+  <script src="scripts/reveal.js"></script>
+  <script src="scripts/app.js"></script>
 </body>
 </html>

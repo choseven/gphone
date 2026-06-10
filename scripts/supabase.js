@@ -1,25 +1,25 @@
 const SUPABASE_URL = window.GARTIC_CONFIG?.url || 'YOUR_SUPABASE_URL';
 const SUPABASE_ANON_KEY = window.GARTIC_CONFIG?.anonKey || 'YOUR_SUPABASE_ANON_KEY';
 
-let sbClient = null;
+let supabase = null;
 
 function initSupabase() {
-  if (sbClient) return sbClient;
+  if (supabase) return supabase;
   if (!window.supabase) {
     throw new Error('Supabase library not loaded');
   }
   if (SUPABASE_URL.startsWith('YOUR_') || SUPABASE_ANON_KEY.startsWith('YOUR_')) {
     showToast('Set your Supabase URL and key in scripts/config.js', 'error', 6000);
   }
-  sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     realtime: { params: { eventsPerSecond: 20 } },
     auth: { persistSession: true, autoRefreshToken: true }
   });
-  return sbClient;
+  return supabase;
 }
 
 function db() {
-  return sbClient || initSupabase();
+  return supabase || initSupabase();
 }
 
 async function getAuthUser() {

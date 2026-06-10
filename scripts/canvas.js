@@ -4,18 +4,29 @@ function createCanvasEngine(mount, opts) {
   const minBrush = opts.minBrush || 2;
   const maxBrush = opts.maxBrush || 60;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  // Allow passing an existing canvas element via opts.canvas
+  let canvas;
+  if (opts.canvas) {
+    canvas = opts.canvas;
+    canvas.width = size;
+    canvas.height = size;
+  } else {
+    canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    if (mount) {
+      mount.innerHTML = '';
+      mount.appendChild(canvas);
+    }
+  }
   const ctx = canvas.getContext('2d');
-  mount.innerHTML = '';
-  mount.appendChild(canvas);
 
   function fitDisplay() {
-    const max = Math.min(mount.parentElement.clientWidth || size, 720);
-    const w = Math.min(max, size);
-    canvas.style.width = w + 'px';
-    canvas.style.height = w + 'px';
+    const parent = canvas.parentElement || (mount && mount.parentElement);
+    const available = parent ? parent.clientWidth : size;
+    const max = Math.min(available || size, size);
+    canvas.style.width = max + 'px';
+    canvas.style.height = max + 'px';
   }
   fitDisplay();
   window.addEventListener('resize', fitDisplay);
