@@ -1,0 +1,102 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        // Anyone can read a room they're in
+        ".read": "auth != null",
+
+        // Room creation — authenticated only
+        ".write": "auth != null && (!data.exists() || data.child('players').child(auth.uid).exists())",
+
+        "hostId": {
+          // Only current host or migration can set this
+          ".write": "auth != null && (data.val() === auth.uid || data.val() === null)"
+        },
+
+        "state": {
+          // Only host can change game state
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "round": {
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "roundStartTime": {
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "playerOrder": {
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "revealChainIdx": {
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "revealEntryIdx": {
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "settings": {
+          // Only host can change settings
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid"
+        },
+
+        "players": {
+          "$playerId": {
+            // Players can only modify their own record
+            ".read":  "auth != null",
+            ".write": "auth != null && auth.uid === $playerId"
+          }
+        },
+
+        "chains": {
+          // Host sets up chain structure; players write their own entries
+          ".write": "auth != null && root.child('rooms').child($roomId).child('hostId').val() === auth.uid",
+
+          "$chainId": {
+            "entries": {
+              "$entryId": {
+                // Players can write entries where author === their uid
+                ".write": "auth != null && (!data.exists() || data.child('author').val() === auth.uid)"
+              }
+            }
+          }
+        },
+
+        "submissions": {
+          "$phase": {
+            "$playerId": {
+              // Players can only mark their own submissions
+              ".write": "auth != null && auth.uid === $playerId"
+            }
+          }
+        },
+
+        "chat": {
+          "$scope": {
+            // Anyone in the room can push messages
+            ".write": "auth != null && root.child('rooms').child($roomId).child('players').child(auth.uid).exists()"
+          }
+        },
+
+        "reactions": {
+          "$reactionType": {
+            "$playerId": {
+              // Players can toggle their own reactions
+              ".write": "auth != null && auth.uid === $playerId"
+            }
+          }
+        },
+
+        "autosave": {
+          "$playerId": {
+            // Players can only autosave their own drawing
+            ".write": "auth != null && auth.uid === $playerId"
+          }
+        }
+      }
+    }
+  }
+}
