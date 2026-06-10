@@ -1,78 +1,55 @@
 const Settings = (function () {
-  let roomId = null;
-  let isHost = false;
-  let current = {};
+  let room = null;
+  let me = null;
 
-  async function init(room, host) {
-    roomId = room.id;
-    isHost = host;
-
-    const { data } = await db().from('settings').select('*').eq('room_id', roomId).single();
-    current = data || {};
-
-    syncToUI();
-
-    if (isHost) {
-      bindControls();
-    } else {
-      // Lock all controls for non-hosts
-      $$('#settings-panel select, #settings-panel input').forEach(el => {
-        el.disabled = true;
-      });
-    }
-
-    Realtime.on('settings', p => {
-      if (p.new) { current = p.new; syncToUI(); }
-    });
+  function init(r, m) {
+    room = r; me = m;
+    load();
   }
 
-  function syncToUI() {
-    setSelect('#setting-prompt-timer', current.prompt_timer ?? 60);
-    setSelect('#setting-draw-timer', current.drawing_timer ?? 90);
-    setSelect('#setting-desc-timer', current.description_timer ?? 60);
+  async function load() {
+    const { data: set } = await db()
+      .from('settings').select('*').eq('room_id', room.id).single();
 
-    const profanity = $('#setting-profanity');
-    if (profanity) profanity.checked = current.profanity_filter || false;
-  }
+    const isHost = me && me.is_host;
 
-  function setSelect(selector, value) {
-    const el = $(selector);
-    if (!el) return;
-    const opts = Array.from(el.options);
-    // Find exact match first, then closest
-    const exact = opts.find(o => parseInt(o.value, 10) === value);
-    if (exact) { el.value = exact.value; return; }
-    // Find closest option
-    let best = opts[0];
-    opts.forEach(o => {
-      if (Math.abs(parseInt(o.value, 10) - value) < Math.abs(parseInt(best.value, 10) - value)) {
-        best = o;
+    setVal('setting-prompt-timer',  set?.prompt_timer     || 60);
+    setVal('setting-draw-timer',    set?.drawing_timer    || 90);
+    setVal('setting-desc-timer',    set?.description_timer|| 60);
+    setVal('setting-profanity',     set?.profanity_filter ? '1' : '0');
+
+    const selects = ['setting-prompt-timer','setting-draw-timer','setting-desc-timer','setting-profanity'];
+    selects.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.disabled = !isHost;
+      if (isHost) {
+        el.onchange = save;
       }
     });
-    if (best) el.value = best.value;
   }
 
-  function bindControls() {
-    const save = debounce(async (key, value) => {
-      const patch = {};
-      patch[key] = value;
-      await db().from('settings').update(patch).eq('room_id', roomId);
-    }, 300);
-
-    const pt = $('#setting-prompt-timer');
-    if (pt) pt.onchange = () => save('prompt_timer', parseInt(pt.value, 10));
-
-    const dt = $('#setting-draw-timer');
-    if (dt) dt.onchange = () => save('drawing_timer', parseInt(dt.value, 10));
-
-    const desc = $('#setting-desc-timer');
-    if (desc) desc.onchange = () => save('description_timer', parseInt(desc.value, 10));
-
-    const pf = $('#setting-profanity');
-    if (pf) pf.onchange = () => save('profanity_filter', pf.checked);
+  function setVal(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = String(val);
   }
 
-  function get() { return current; }
+  async function save() {
+    if (!me || !me.is_host) return;
+    const promptTimer  = parseInt(document.getElementById('setting-prompt-timer')?.value || '60', 10);
+    const drawTimer    = parseInt(document.getElementById('setting-draw-timer')?.value   || '90', 10);
+    const descTimer    = parseInt(document.getElementById('setting-desc-timer')?.value   || '60', 10);
+    const profanity    = document.getElementById('setting-profanity')?.value === '1';
 
-  return { init, get };
+    await db().from('settings').upsert({
+      room_id: room.id,
+      prompt_timer: promptTimer,
+      drawing_timer: drawTimer,
+      description_timer: descTimer,
+      profanity_filter: profanity
+    }, { onConflict: 'room_id' });
+  }
+
+  return { init };
 })();

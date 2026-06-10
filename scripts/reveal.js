@@ -1,35 +1,29 @@
 const Reveal = (function () {
-  let chains = [];
-  let entriesByChain = {};
-  let playerMap = {};
-  let chainIdx = 0;
-  let stepIdx = 0;
-  let currentRoom = null;
-  let currentMe = null;
-  // Reaction counts (local)
-  const rxnCounts = { '😂': 0, '😲': 0, '❤️': 0 };
+  var chains = [];
+  var entriesByChain = {};
+  var playerMap = {};
+  var chainIdx = 0;
+  var stepIdx = 0;
+  var currentRoom = null;
+  var currentMe = null;
+  var rxnCounts = { laugh: 0, wow: 0, heart: 0 };
 
   async function load(room, set) {
     currentRoom = room;
-    const { data: ch } = await db()
-      .from('chains').select('*').eq('room_id', room.id).order('position', { ascending: true });
-    chains = ch || [];
+    var chRes = await db().from('chains').select('*').eq('room_id', room.id).order('position', { ascending: true });
+    chains = chRes.data || [];
 
-    const { data: entries } = await db()
-      .from('chain_entries').select('*').eq('room_id', room.id).order('step', { ascending: true });
-
-    const { data: players } = await db()
-      .from('players').select('id, username, avatar').eq('room_id', room.id);
+    var eRes = await db().from('chain_entries').select('*').eq('room_id', room.id).order('step', { ascending: true });
+    var pRes = await db().from('players').select('id, username, avatar').eq('room_id', room.id);
     playerMap = {};
-    (players || []).forEach(p => playerMap[p.id] = p);
+    (pRes.data || []).forEach(function(p) { playerMap[p.id] = p; });
 
-    const { data: drawings } = await db()
-      .from('drawings').select('id, data').eq('room_id', room.id);
-    const dmap = {};
-    (drawings || []).forEach(d => dmap[d.id] = d.data);
+    var dRes = await db().from('drawings').select('id, data').eq('room_id', room.id);
+    var dmap = {};
+    (dRes.data || []).forEach(function(d) { dmap[d.id] = d.data; });
 
     entriesByChain = {};
-    (entries || []).forEach(e => {
+    (eRes.data || []).forEach(function(e) {
       e._author = playerMap[e.author_player_id] || { username: 'Someone', avatar: '0' };
       if (e.drawing_id) e._drawingData = dmap[e.drawing_id];
       entriesByChain[e.chain_id] = entriesByChain[e.chain_id] || [];
@@ -38,7 +32,6 @@ const Reveal = (function () {
 
     chainIdx = 0;
     stepIdx = 0;
-
     App.showScreen('reveal');
     bind(room);
     showCurrentChain();
@@ -47,109 +40,112 @@ const Reveal = (function () {
   function bind(room) {
     currentMe = Room.getMe();
 
-    // Prev/Next entry buttons
-    $('#btn-prev-entry').onclick = () => {
+    var prevBtn = document.getElementById('btn-prev-entry');
+    if (prevBtn) prevBtn.onclick = function() {
       if (stepIdx > 1) { stepIdx--; rebuildChain(); }
     };
-    $('#btn-next-entry').onclick = () => {
-      revealNext();
-    };
 
-    // Host chain navigation
-    const hostControls = $('#host-reveal-controls');
-    if (currentMe?.is_host) {
-      hostControls.classList.remove('hidden');
+    var nextBtn = document.getElementById('btn-next-entry');
+    if (nextBtn) nextBtn.onclick = revealNext;
 
-      $('#btn-prev-chain').onclick = () => {
+    var hostControls = document.getElementById('host-reveal-controls');
+    if (currentMe && currentMe.is_host) {
+      if (hostControls) hostControls.classList.remove('hidden');
+
+      var prevChain = document.getElementById('btn-prev-chain');
+      if (prevChain) prevChain.onclick = function() {
         if (chainIdx > 0) { chainIdx--; stepIdx = 0; showCurrentChain(); }
       };
-      $('#btn-next-chain').onclick = () => {
+
+      var nextChain = document.getElementById('btn-next-chain');
+      if (nextChain) nextChain.onclick = function() {
         if (chainIdx < chains.length - 1) { chainIdx++; stepIdx = 0; showCurrentChain(); }
         else showGameOver();
       };
-      $('#btn-finish-reveal').onclick = showGameOver;
+
+      var finishBtn = document.getElementById('btn-finish-reveal');
+      if (finishBtn) finishBtn.onclick = showGameOver;
     } else {
-      hostControls.classList.add('hidden');
+      if (hostControls) hostControls.classList.add('hidden');
     }
 
-    // Reaction buttons
-    $$('.reaction-btn').forEach(btn => {
-      btn.onclick = () => {
-        const emoji = btn.dataset.emoji;
-        rxnCounts[emoji] = (rxnCounts[emoji] || 0) + 1;
+    document.querySelectorAll('.reaction-btn').forEach(function(btn) {
+      btn.onclick = function() {
+        var emoji = btn.dataset.emoji;
+        var key = emoji === '😂' ? 'laugh' : emoji === '😲' ? 'wow' : 'heart';
+        rxnCounts[key] = (rxnCounts[key] || 0) + 1;
         updateReactionCounts();
         floatEmoji(emoji);
       };
     });
 
-    // Reveal chat
-    Chat.initReveal(room, currentMe || { id: 'anon', username: 'Guest' });
+    Chat.initReveal(room, currentMe || { id: 'anon', username: 'Guest', avatar: '0' });
   }
 
   function showCurrentChain() {
     stepIdx = 0;
-    const container = $('#reveal-chain');
-    container.innerHTML = '';
-    $('#reveal-chain-label').textContent = `Chain ${chainIdx + 1} / ${chains.length}`;
-    revealNext(); // show first entry automatically
+    var container = document.getElementById('reveal-chain');
+    if (container) container.innerHTML = '';
+    var label = document.getElementById('reveal-chain-label');
+    if (label) label.textContent = 'Chain ' + (chainIdx + 1) + ' / ' + chains.length;
+    revealNext();
   }
 
   function rebuildChain() {
-    const container = $('#reveal-chain');
+    var container = document.getElementById('reveal-chain');
+    if (!container) return;
     container.innerHTML = '';
-    const entries = currentEntries();
-    const target = stepIdx;
+    var entries = currentEntries();
+    var target = stepIdx;
     stepIdx = 0;
-    for (let i = 0; i < target; i++) {
+    for (var i = 0; i < target; i++) {
       appendEntry(entries[i]);
       stepIdx++;
     }
   }
 
   function revealNext() {
-    const entries = currentEntries();
+    var entries = currentEntries();
     if (stepIdx >= entries.length) return;
     appendEntry(entries[stepIdx]);
     stepIdx++;
   }
 
   function appendEntry(e) {
-    const container = $('#reveal-chain');
-    const card = document.createElement('div');
+    var container = document.getElementById('reveal-chain');
+    if (!container) return;
+    var card = document.createElement('div');
 
     if (e.type === 'drawing') {
       card.className = 'chain-entry drawing-entry';
-      const authorLabel = document.createElement('div');
+      var authorLabel = document.createElement('div');
       authorLabel.className = 'entry-type-label';
-      authorLabel.innerHTML = `<span>🎨 Drawing</span><span class="entry-author">by ${escapeHtml(e._author.username)}</span>`;
+      authorLabel.innerHTML = '<span>Drawing</span><span class="entry-author">by ' + escapeHtml(e._author.username) + '</span>';
       card.appendChild(authorLabel);
 
       if (e._drawingData) {
-        const img = document.createElement('img');
+        var img = document.createElement('img');
         img.className = 'entry-image';
         img.src = drawingToDataURL(e._drawingData);
         img.alt = 'Drawing';
         card.appendChild(img);
       } else {
-        const ph = document.createElement('p');
+        var ph = document.createElement('p');
         ph.textContent = '(empty drawing)';
         ph.style.color = 'var(--text-muted)';
         card.appendChild(ph);
       }
     } else {
-      const isPrompt = e.step === 0 || e.type === 'prompt';
+      var isPrompt = e.step === 0 || e.type === 'prompt';
       card.className = 'chain-entry ' + (isPrompt ? 'prompt-entry' : 'description-entry');
-
-      const label = isPrompt ? '✍️ Prompt' : '💬 Description';
-      const authorLabel = document.createElement('div');
-      authorLabel.className = 'entry-type-label';
-      authorLabel.innerHTML = `<span>${label}</span><span class="entry-author">by ${escapeHtml(e._author.username)}</span>`;
-
-      const text = document.createElement('div');
+      var labelText = isPrompt ? 'Prompt' : 'Description';
+      var authorLabel2 = document.createElement('div');
+      authorLabel2.className = 'entry-type-label';
+      authorLabel2.innerHTML = '<span>' + labelText + '</span><span class="entry-author">by ' + escapeHtml(e._author.username) + '</span>';
+      var text = document.createElement('div');
       text.className = 'entry-text';
       text.textContent = e.content || '(nothing)';
-
-      card.appendChild(authorLabel);
+      card.appendChild(authorLabel2);
       card.appendChild(text);
     }
 
@@ -158,61 +154,56 @@ const Reveal = (function () {
   }
 
   function currentEntries() {
-    return entriesByChain[chains[chainIdx]?.id] || [];
+    var chain = chains[chainIdx];
+    return chain ? (entriesByChain[chain.id] || []) : [];
   }
 
   function updateReactionCounts() {
-    const el = document.getElementById('rxn-laugh');
-    if (el) el.textContent = rxnCounts['😂'] || 0;
-    const el2 = document.getElementById('rxn-wow');
-    if (el2) el2.textContent = rxnCounts['😲'] || 0;
-    const el3 = document.getElementById('rxn-heart');
-    if (el3) el3.textContent = rxnCounts['❤️'] || 0;
+    var el = document.getElementById('rxn-laugh');
+    if (el) el.textContent = rxnCounts.laugh || 0;
+    var el2 = document.getElementById('rxn-wow');
+    if (el2) el2.textContent = rxnCounts.wow || 0;
+    var el3 = document.getElementById('rxn-heart');
+    if (el3) el3.textContent = rxnCounts.heart || 0;
   }
 
   function showGameOver() {
     App.showScreen('gameover');
     renderScoreboard();
 
-    $('#btn-play-again').onclick = async () => {
-      if (currentRoom && currentMe?.is_host) {
-        await Game.start();
-      } else {
-        Lobby.returnToLobby();
-      }
-    };
+    var playAgainBtn = document.getElementById('btn-play-again');
+    if (playAgainBtn) {
+      playAgainBtn.onclick = async function() {
+        if (currentRoom && currentMe && currentMe.is_host) await Game.start();
+        else Lobby.returnToLobby();
+      };
+    }
 
-    $('#btn-back-lobby').onclick = () => {
-      Lobby.returnToLobby();
-    };
+    var backLobbyBtn = document.getElementById('btn-back-lobby');
+    if (backLobbyBtn) {
+      backLobbyBtn.onclick = function() { Lobby.returnToLobby(); };
+    }
   }
 
   async function renderScoreboard() {
-    const board = $('#scoreboard');
+    var board = document.getElementById('scoreboard');
     if (!board) return;
     board.innerHTML = '';
-
-    // Build simple scoreboard from all players
-    const room = Room.get();
+    var room = Room.get();
     if (!room) return;
-    const { data: players } = await db()
-      .from('players')
-      .select('id, username, avatar, score')
-      .eq('room_id', room.id)
-      .order('score', { ascending: false });
-
-    (players || []).forEach((p, i) => {
-      const row = document.createElement('div');
+    var pRes = await db().from('players').select('id, username, avatar, score')
+      .eq('room_id', room.id).order('score', { ascending: false });
+    var medals = ['1st', '2nd', '3rd'];
+    (pRes.data || []).forEach(function(p, i) {
+      var row = document.createElement('div');
       row.className = 'score-row';
-      const medals = ['🥇', '🥈', '🥉'];
-      row.innerHTML = `
-        <span class="score-rank">${medals[i] || (i + 1)}</span>
-        <span class="score-name">${avatarFor(p.avatar)} ${escapeHtml(p.username)}</span>
-        <span class="score-pts">${p.score || 0} pts</span>
-      `;
+      row.innerHTML =
+        '<span class="score-rank">' + (medals[i] || (i + 1)) + '</span>' +
+        '<span class="score-name">' + avatarFor(p.avatar) + ' ' + escapeHtml(p.username) + '</span>' +
+        '<span class="score-pts">' + (p.score || 0) + ' pts</span>';
       board.appendChild(row);
     });
   }
 
-  return { load };
+  return { load: load };
 })();

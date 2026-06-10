@@ -1,71 +1,53 @@
 const Game = (function () {
-  let room = null;
-  let me = null;
-  let gs = null;
-  let settings = {};
-  let localTimer = null;
-  let hostPoll = null;
-  let submittedThisRound = false;
-  let assignedChainId = null;
-  let prevEntry = null;
-  let phaseTotalSecs = 60;
-
-  // ── ENTRY POINTS ──────────────────────────────────────────
+  var room = null;
+  var me = null;
+  var gs = null;
+  var settings = {};
+  var localTimer = null;
+  var hostPoll = null;
+  var submittedThisRound = false;
+  var assignedChainId = null;
+  var prevEntry = null;
+  var phaseTotalSecs = 60;
+  var advancing = false;
 
   async function enter(r, m) {
     room = r; me = m;
-
-    const { data: set } = await db().from('settings').select('*').eq('room_id', room.id).single();
-    settings = set || {};
-
-    const { data: g } = await db().from('game_states').select('*').eq('room_id', room.id).single();
-    gs = g;
-
-    Realtime.on('game_state', p => { if (p.new) onState(p.new); });
-    Realtime.on('chain_entry', () => { if (me.is_host) maybeAdvance(); });
-
+    var setRes = await db().from('settings').select('*').eq('room_id', room.id).single();
+    settings = setRes.data || {};
+    var gsRes = await db().from('game_states').select('*').eq('room_id', room.id).single();
+    gs = gsRes.data;
+    Realtime.on('game_state', function(p) { if (p.new) onState(p.new); });
+    Realtime.on('chain_entry', function() { if (me.is_host) maybeAdvance(); });
     if (gs) onState(gs);
     if (me.is_host) startHostPoll();
   }
 
   async function start() {
-    const players = Lobby.getPlayers().filter(p => p.is_connected && !p.is_spectator);
+    var players = Lobby.getPlayers().filter(function(p) { return p.is_connected && !p.is_spectator; });
     if (players.length < 2) { showToast('Need at least 2 players', 'error'); return; }
-
-    const { data: set } = await db().from('settings').select('*').eq('room_id', room.id).single();
-    settings = set || {};
-
-    // Clear previous game data
+    var setRes = await db().from('settings').select('*').eq('room_id', room.id).single();
+    settings = setRes.data || {};
     await db().from('chain_entries').delete().eq('room_id', room.id);
     await db().from('drawings').delete().eq('room_id', room.id);
     await db().from('chains').delete().eq('room_id', room.id);
-    await db().from('votes').delete().eq('room_id', room.id);
-
-    const order = players.map(p => p.id);
-    const chainIds = [];
-    for (let i = 0; i < order.length; i++) {
-      const { data: c } = await db()
-        .from('chains')
+    var order = players.map(function(p) { return p.id; });
+    var chainIds = [];
+    for (var i = 0; i < order.length; i++) {
+      var cr = await db().from('chains')
         .insert({ room_id: room.id, owner_player_id: order[i], position: i })
-        .select()
-        .single();
-      chainIds.push(c.id);
+        .select().single();
+      chainIds.push(cr.data.id);
     }
-
-    const total = (settings.rounds && settings.rounds > 0)
-      ? Math.min(settings.rounds, order.length)
-      : order.length;
-
-    const payload = { round: 0, totalRounds: total, order, chains: chainIds };
-    const secs = settings.prompt_timer || 60;
+    var total = (settings.rounds && settings.rounds > 0) ? Math.min(settings.rounds, order.length) : order.length;
+    var payload = { round: 0, totalRounds: total, order: order, chains: chainIds };
+    var secs = settings.prompt_timer || 60;
     await setPhase('PROMPT', 0, payload, secs);
     await db().from('rooms').update({ state: 'PROMPT', total_rounds: total, current_round: 0 }).eq('id', room.id);
   }
 
-  // ── STATE MACHINE ─────────────────────────────────────────
-
   function onState(newGs) {
-    const changed = !gs || gs.round !== newGs.round || gs.phase !== newGs.phase;
+    var changed = !gs || gs.round !== newGs.round || gs.phase !== newGs.phase;
     gs = newGs;
     if (gs.phase === 'FINISHED' || gs.phase === 'REVEAL') { goReveal(); return; }
     if (changed) setupRound();
@@ -79,140 +61,101 @@ const Game = (function () {
 
   async function setupRound() {
     submittedThisRound = false;
-
-    const payload = gs.payload || {};
-    const order = payload.order || [];
-    const chains = payload.chains || [];
-    const n = order.length;
-    const r = gs.round;
-    const myIdx = order.indexOf(me.id);
-
-    // Spectators or players not in the round just see waiting
+    var payload = gs.payload || {};
+    var order = payload.order || [];
+    var chains = payload.chains || [];
+    var n = order.length;
+    var r = gs.round;
+    var myIdx = order.indexOf(me.id);
     if (myIdx === -1) {
       App.showScreen('waiting');
-      $('#waiting-big-text').textContent = 'Spectating…';
+      var wb = document.getElementById('waiting-big-text');
+      if (wb) wb.textContent = 'Spectating...';
       return;
     }
-
-    const chainPos = ((myIdx - r) % n + n * 50) % n;
+    var chainPos = ((myIdx - r) % n + n * 50) % n;
     assignedChainId = chains[chainPos];
-
     prevEntry = null;
     if (r > 0) {
-      const { data } = await db()
-        .from('chain_entries')
-        .select('*')
-        .eq('chain_id', assignedChainId)
-        .eq('step', r - 1)
-        .maybeSingle();
-      prevEntry = data;
+      var peRes = await db().from('chain_entries').select('*')
+        .eq('chain_id', assignedChainId).eq('step', r - 1).maybeSingle();
+      prevEntry = peRes.data;
     }
-
-    const phase = phaseForRound(r);
-
+    var phase = phaseForRound(r);
     if (phase === 'PROMPT') setupPrompt(payload);
     else if (phase === 'DRAWING') setupDrawing();
     else setupDescription();
   }
 
-  // ── PROMPT PHASE ──────────────────────────────────────────
-
-  function setupPrompt(payload) {
+  function setupPrompt() {
     App.showScreen('prompt');
     hideWaiting('prompt');
-
-    const ta = $('#prompt-textarea');
-    const counter = $('#prompt-char-count');
-    ta.value = '';
-    if (counter) counter.textContent = '0';
-    ta.oninput = () => { if (counter) counter.textContent = ta.value.length; };
-    ta.focus();
-
-    $('#btn-submit-prompt').onclick = () => submitText(ta.value, 'prompt');
-    $('#btn-submit-prompt').disabled = false;
-
+    var ta = document.getElementById('prompt-textarea');
+    var counter = document.getElementById('prompt-char-count');
+    if (ta) {
+      ta.value = '';
+      ta.oninput = function() { if (counter) counter.textContent = ta.value.length; };
+      ta.focus();
+    }
+    var btn = document.getElementById('btn-submit-prompt');
+    if (btn) { btn.disabled = false; btn.onclick = function() { submitText(ta ? ta.value : '', 'prompt'); }; }
     phaseTotalSecs = settings.prompt_timer || 60;
+    syncTimer();
   }
-
-  // ── DRAWING PHASE ─────────────────────────────────────────
 
   function setupDrawing() {
     App.showScreen('drawing');
     hideWaiting('draw');
-
-    const promptText = prevEntry?.content || 'Draw anything!';
-    $('#draw-prompt-display').textContent = promptText;
-
-    Drawing.mount(null, { settings });
-
-    $('#btn-submit-drawing').onclick = submitDrawing;
-    $('#btn-submit-drawing').disabled = false;
-
+    var disp = document.getElementById('draw-prompt-display');
+    if (disp) disp.textContent = (prevEntry && prevEntry.content) ? prevEntry.content : 'Draw anything!';
+    Drawing.mount(null, { settings: settings });
+    var btn = document.getElementById('btn-submit-drawing');
+    if (btn) { btn.disabled = false; btn.onclick = submitDrawing; }
     phaseTotalSecs = settings.drawing_timer || 90;
+    syncTimer();
   }
-
-  // ── DESCRIPTION PHASE ─────────────────────────────────────
 
   async function setupDescription() {
     App.showScreen('description');
     hideWaiting('desc');
-
-    const img = $('#desc-image');
-    img.src = '';
-
+    var img = document.getElementById('desc-image');
+    if (img) img.src = '';
     if (prevEntry && prevEntry.drawing_id) {
-      const { data: d } = await db()
-        .from('drawings')
-        .select('data')
-        .eq('id', prevEntry.drawing_id)
-        .single();
-      if (d?.data) {
-        img.src = drawingToDataURL(d.data);
-      }
+      var dRes = await db().from('drawings').select('data').eq('id', prevEntry.drawing_id).single();
+      if (dRes.data && dRes.data.data && img) img.src = drawingToDataURL(dRes.data.data);
     }
-
-    const ta = $('#desc-textarea');
-    const counter = $('#desc-char-count');
-    ta.value = '';
-    if (counter) counter.textContent = '0';
-    ta.oninput = () => { if (counter) counter.textContent = ta.value.length; };
-    ta.focus();
-
-    $('#btn-submit-desc').onclick = () => submitText(ta.value, 'description');
-    $('#btn-submit-desc').disabled = false;
-
+    var ta = document.getElementById('desc-textarea');
+    var counter = document.getElementById('desc-char-count');
+    if (ta) {
+      ta.value = '';
+      ta.oninput = function() { if (counter) counter.textContent = ta.value.length; };
+      ta.focus();
+    }
+    var btn = document.getElementById('btn-submit-desc');
+    if (btn) { btn.disabled = false; btn.onclick = function() { submitText(ta ? ta.value : '', 'description'); }; }
     phaseTotalSecs = settings.description_timer || 60;
+    syncTimer();
   }
-
-  // ── SUBMISSION ────────────────────────────────────────────
 
   async function submitText(text, type) {
     if (submittedThisRound) return;
-    let content = text.trim();
+    var content = (text || '').trim();
     if (!content) content = type === 'prompt' ? randomPrompt() : '(no idea)';
     content = cleanText(content, settings.profanity_filter);
     submittedThisRound = true;
-
-    // Disable button immediately
-    const btnId = type === 'prompt' ? 'btn-submit-prompt' : 'btn-submit-desc';
-    const btn = $('#' + btnId);
+    var btnId = type === 'prompt' ? 'btn-submit-prompt' : 'btn-submit-desc';
+    var btn = document.getElementById(btnId);
     if (btn) btn.disabled = true;
-
     try {
       await db().from('chain_entries').insert({
-        chain_id: assignedChainId,
-        room_id: room.id,
-        author_player_id: me.id,
-        step: gs.round,
-        type,
-        content
+        chain_id: assignedChainId, room_id: room.id,
+        author_player_id: me.id, step: gs.round, type: type, content: content
       });
     } catch (_) {
       submittedThisRound = false;
       if (btn) btn.disabled = false;
       return;
     }
-
     showWaiting(type === 'prompt' ? 'prompt' : 'desc');
     if (me.is_host) maybeAdvance();
   }
@@ -220,70 +163,51 @@ const Game = (function () {
   async function submitDrawing() {
     if (submittedThisRound) return;
     submittedThisRound = true;
-
-    const btn = $('#btn-submit-drawing');
+    var btn = document.getElementById('btn-submit-drawing');
     if (btn) btn.disabled = true;
-
     try {
-      const data = Drawing.getData();
-      const { data: d } = await db()
-        .from('drawings')
-        .insert({ room_id: room.id, chain_id: assignedChainId, author_player_id: me.id, data })
-        .select()
-        .single();
-
+      var data = Drawing.getData();
+      var dRes = await db().from('drawings')
+        .insert({ room_id: room.id, chain_id: assignedChainId, author_player_id: me.id, data: data })
+        .select().single();
       await db().from('chain_entries').insert({
-        chain_id: assignedChainId,
-        room_id: room.id,
-        author_player_id: me.id,
-        step: gs.round,
-        type: 'drawing',
-        drawing_id: d.id
+        chain_id: assignedChainId, room_id: room.id,
+        author_player_id: me.id, step: gs.round, type: 'drawing', drawing_id: dRes.data.id
       });
     } catch (_) {
       submittedThisRound = false;
       if (btn) btn.disabled = false;
       return;
     }
-
     showWaiting('draw');
     if (me.is_host) maybeAdvance();
   }
 
-  // Show waiting panel within the current phase screen
   function showWaiting(phase) {
-    const panelId = 'waiting-panel-' + phase;
-    const panel = $('#' + panelId);
+    var panel = document.getElementById('waiting-panel-' + phase);
     if (panel) panel.classList.remove('hidden');
     renderWaitingAvatars(phase);
   }
 
   function hideWaiting(phase) {
-    const panel = $('#waiting-panel-' + phase);
+    var panel = document.getElementById('waiting-panel-' + phase);
     if (panel) panel.classList.add('hidden');
   }
 
   async function renderWaitingAvatars(phase) {
-    const { data: entries } = await db()
-      .from('chain_entries')
-      .select('author_player_id')
-      .eq('room_id', room.id)
-      .eq('step', gs.round);
-
-    const done = new Set((entries || []).map(e => e.author_player_id));
-    const order = (gs.payload && gs.payload.order) || [];
-    const allPlayers = Lobby.getPlayers ? Lobby.getPlayers() : [];
-    const pmap = {};
-    allPlayers.forEach(p => pmap[p.id] = p);
-
-    const containerId = 'waiting-avatars-' + phase;
-    const container = $('#' + containerId);
+    var eRes = await db().from('chain_entries').select('author_player_id')
+      .eq('room_id', room.id).eq('step', gs.round);
+    var done = new Set((eRes.data || []).map(function(e) { return e.author_player_id; }));
+    var order = (gs.payload && gs.payload.order) || [];
+    var allPlayers = Lobby.getPlayers ? Lobby.getPlayers() : [];
+    var pmap = {};
+    allPlayers.forEach(function(p) { pmap[p.id] = p; });
+    var container = document.getElementById('waiting-avatars-' + phase);
     if (!container) return;
-
     container.innerHTML = '';
-    order.forEach((pid, i) => {
-      const p = pmap[pid];
-      const av = document.createElement('div');
+    order.forEach(function(pid, i) {
+      var p = pmap[pid];
+      var av = document.createElement('div');
       av.className = 'waiting-avatar av-' + (i % 10) + (done.has(pid) ? ' done' : '');
       av.title = p ? p.username : 'Player';
       av.textContent = p ? avatarFor(p.avatar) : '?';
@@ -291,27 +215,17 @@ const Game = (function () {
     });
   }
 
-  // ── HOST ADVANCE LOGIC ────────────────────────────────────
-
-  let advancing = false;
-
   async function maybeAdvance() {
     if (!me.is_host || advancing) return;
-    const order = (gs.payload && gs.payload.order) || [];
-    const { data: pRows } = await db().from('players').select('id').eq('room_id', room.id).eq('is_connected', true);
-    const activeIds = new Set((pRows || []).map(p => p.id));
-    const expected = order.filter(id => activeIds.has(id));
-
-    const { data: entries } = await db()
-      .from('chain_entries')
-      .select('author_player_id')
-      .eq('room_id', room.id)
-      .eq('step', gs.round);
-
-    const have = new Set((entries || []).map(e => e.author_player_id));
-    const allIn = expected.every(id => have.has(id));
-    const expired = gs.phase_ends_at && new Date(gs.phase_ends_at).getTime() < Date.now();
-
+    var order = (gs.payload && gs.payload.order) || [];
+    var pRes = await db().from('players').select('id').eq('room_id', room.id).eq('is_connected', true);
+    var activeIds = new Set((pRes.data || []).map(function(p) { return p.id; }));
+    var expected = order.filter(function(id) { return activeIds.has(id); });
+    var eRes = await db().from('chain_entries').select('author_player_id')
+      .eq('room_id', room.id).eq('step', gs.round);
+    var have = new Set((eRes.data || []).map(function(e) { return e.author_player_id; }));
+    var allIn = expected.every(function(id) { return have.has(id); });
+    var expired = gs.phase_ends_at && new Date(gs.phase_ends_at).getTime() < Date.now();
     if (allIn || expired) {
       if (expired && !allIn) await fillMissing(order, have);
       await advance();
@@ -319,32 +233,30 @@ const Game = (function () {
   }
 
   async function fillMissing(order, have) {
-    const r = gs.round;
-    const phase = phaseForRound(r);
-    const chains = gs.payload.chains;
-    const n = order.length;
-
-    for (let i = 0; i < order.length; i++) {
-      const pid = order[i];
+    var r = gs.round;
+    var phase = phaseForRound(r);
+    var chains = gs.payload.chains;
+    var n = order.length;
+    for (var i = 0; i < order.length; i++) {
+      var pid = order[i];
       if (have.has(pid)) continue;
-      const chainPos = ((i - r) % n + n * 50) % n;
-      const cid = chains[chainPos];
-
+      var chainPos = ((i - r) % n + n * 50) % n;
+      var cid = chains[chainPos];
       if (phase === 'DRAWING') {
-        const { data: d } = await db()
-          .from('drawings')
-          .insert({ room_id: room.id, chain_id: cid, author_player_id: pid, data: { size: settings.canvas_size || 720, strokes: [] } })
+        var dRes = await db().from('drawings')
+          .insert({ room_id: room.id, chain_id: cid, author_player_id: pid,
+                    data: { size: settings.canvas_size || 720, strokes: [] } })
           .select().single();
         await db().from('chain_entries').insert({
           chain_id: cid, room_id: room.id, author_player_id: pid,
-          step: r, type: 'drawing', drawing_id: d.id
-        }).catch(() => {});
+          step: r, type: 'drawing', drawing_id: dRes.data.id
+        }).catch(function() {});
       } else {
         await db().from('chain_entries').insert({
           chain_id: cid, room_id: room.id, author_player_id: pid,
           step: r, type: phase === 'PROMPT' ? 'prompt' : 'description',
           content: '(ran out of time)'
-        }).catch(() => {});
+        }).catch(function() {});
       }
     }
   }
@@ -352,20 +264,17 @@ const Game = (function () {
   async function advance() {
     advancing = true;
     try {
-      const payload = gs.payload;
-      const next = gs.round + 1;
-
+      var payload = gs.payload;
+      var next = gs.round + 1;
       if (next >= payload.totalRounds) {
         await db().from('game_states')
           .update({ state: 'FINISHED', phase: 'FINISHED', updated_at: new Date().toISOString() })
           .eq('room_id', room.id);
         await db().from('rooms').update({ state: 'FINISHED' }).eq('id', room.id);
       } else {
-        const phase = phaseForRound(next);
-        const secs = phase === 'DRAWING'
-          ? (settings.drawing_timer || 90)
-          : phase === 'PROMPT'
-          ? (settings.prompt_timer || 60)
+        var phase = phaseForRound(next);
+        var secs = phase === 'DRAWING' ? (settings.drawing_timer || 90)
+          : phase === 'PROMPT' ? (settings.prompt_timer || 60)
           : (settings.description_timer || 60);
         await setPhase(phase, next, payload, secs);
       }
@@ -375,82 +284,80 @@ const Game = (function () {
   }
 
   async function setPhase(phase, round, payload, seconds) {
-    const ends = new Date(Date.now() + seconds * 1000).toISOString();
+    var ends = new Date(Date.now() + seconds * 1000).toISOString();
     await db().from('game_states').update({
-      state: phase, phase, round, payload,
-      phase_ends_at: ends,
-      updated_at: new Date().toISOString()
+      state: phase, phase: phase, round: round, payload: payload,
+      phase_ends_at: ends, updated_at: new Date().toISOString()
     }).eq('room_id', room.id);
-    await db().from('rooms').update({ state: phase, current_round: round, phase_ends_at: ends }).eq('id', room.id);
+    await db().from('rooms').update({
+      state: phase, current_round: round, phase_ends_at: ends
+    }).eq('id', room.id);
   }
 
   function startHostPoll() {
     clearInterval(hostPoll);
-    hostPoll = setInterval(() => {
+    hostPoll = setInterval(function() {
       if (me.is_host && gs && gs.phase !== 'FINISHED' && gs.phase !== 'REVEAL') {
         maybeAdvance();
-        // Also refresh waiting avatar dots
-        const phase = phaseForRound(gs.round);
-        const phaseName = phase === 'PROMPT' ? 'prompt' : phase === 'DRAWING' ? 'draw' : 'desc';
-        if (submittedThisRound) renderWaitingAvatars(phaseName);
+        if (submittedThisRound) {
+          var phaseName = phaseForRound(gs.round);
+          var key = phaseName === 'PROMPT' ? 'prompt' : phaseName === 'DRAWING' ? 'draw' : 'desc';
+          renderWaitingAvatars(key);
+        }
       }
     }, 3000);
   }
 
-  // ── TIMER ─────────────────────────────────────────────────
-
   function syncTimer() {
     clearInterval(localTimer);
     if (!gs || !gs.phase_ends_at) return;
-
-    const phase = gs.phase;
-    let displayId, ringId;
-    if (phase === 'PROMPT')      { displayId = 'timer-display-prompt'; ringId = 'timer-ring-prompt'; }
-    else if (phase === 'DRAWING') { displayId = 'timer-display-draw';  ringId = 'timer-ring-draw';  }
+    var phase = gs.phase;
+    var displayId = null, ringId = null;
+    if (phase === 'PROMPT')       { displayId = 'timer-display-prompt'; ringId = 'timer-ring-prompt'; }
+    else if (phase === 'DRAWING')  { displayId = 'timer-display-draw';  ringId = 'timer-ring-draw'; }
     else if (phase === 'DESCRIPTION') { displayId = 'timer-display-desc'; ringId = 'timer-ring-desc'; }
-
-    const endMs = new Date(gs.phase_ends_at).getTime();
-
-    const tick = () => {
-      const left = Math.max(0, (endMs - Date.now()) / 1000);
-      const display = displayId ? document.getElementById(displayId) : null;
+    var endMs = new Date(gs.phase_ends_at).getTime();
+    var tick = function() {
+      var left = Math.max(0, (endMs - Date.now()) / 1000);
+      var display = displayId ? document.getElementById(displayId) : null;
       if (display) display.textContent = Math.ceil(left);
-
-      const ring = ringId ? document.getElementById(ringId) : null;
+      var ring = ringId ? document.getElementById(ringId) : null;
       if (ring) {
-        const pct = phaseTotalSecs > 0 ? left / phaseTotalSecs : 0;
-        const offset = 113 * (1 - pct);
+        var pct = phaseTotalSecs > 0 ? left / phaseTotalSecs : 0;
+        var offset = 113 * (1 - pct);
         ring.style.strokeDashoffset = Math.max(0, Math.min(113, offset));
         ring.style.stroke = left <= 10 ? 'var(--danger)' : 'var(--accent3)';
       }
-
       if (left <= 0) {
         clearInterval(localTimer);
         if (!submittedThisRound) autoSubmit();
       }
     };
-
     tick();
     localTimer = setInterval(tick, 250);
   }
 
   function autoSubmit() {
     if (submittedThisRound) return;
-    const phase = phaseForRound(gs.round);
+    var phase = phaseForRound(gs.round);
     if (phase === 'DRAWING') submitDrawing();
-    else if (phase === 'PROMPT') submitText($('#prompt-textarea')?.value || '', 'prompt');
-    else submitText($('#desc-textarea')?.value || '', 'description');
+    else if (phase === 'PROMPT') {
+      var ta = document.getElementById('prompt-textarea');
+      submitText(ta ? ta.value : '', 'prompt');
+    } else {
+      var ta2 = document.getElementById('desc-textarea');
+      submitText(ta2 ? ta2.value : '', 'description');
+    }
   }
-
-  // ── GO TO REVEAL ──────────────────────────────────────────
 
   async function goReveal() {
     clearInterval(localTimer);
     clearInterval(hostPoll);
     App.showScreen('waiting');
-    $('#waiting-big-text').textContent = 'Loading results…';
+    var wb = document.getElementById('waiting-big-text');
+    if (wb) wb.textContent = 'Loading results...';
     await Reveal.load(room, settings);
   }
 
-  return { enter, start };
+  return { enter: enter, start: start };
 })();

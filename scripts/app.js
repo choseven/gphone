@@ -1,9 +1,9 @@
 const App = (function () {
-  let pendingAction = null; // 'create' | 'join'
+  let pendingAction = null;
   let pendingCode = null;
 
   function showScreen(name) {
-    $$('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById('screen-' + name);
     if (el) el.classList.add('active');
     else console.warn('Screen not found: screen-' + name);
@@ -12,21 +12,27 @@ const App = (function () {
   function goHome() {
     showScreen('landing');
     location.hash = '';
-    $('#join-form').classList.add('hidden');
-    $('#name-form').classList.add('hidden');
+    document.getElementById('join-form').classList.add('hidden');
+    document.getElementById('name-form').classList.add('hidden');
     pendingAction = null;
     pendingCode = null;
   }
 
   async function boot() {
-    initSupabase();
-
+    // Bind UI first — before any async work that might fail
     const stored = getStoredName();
-    if (stored) $('#name-input').value = stored;
-
+    if (stored) document.getElementById('name-input').value = stored;
     bindLanding();
 
-    // Try to rejoin an existing session
+    // Initialize Supabase
+    try {
+      initSupabase();
+    } catch (e) {
+      showToast('Could not connect to server: ' + e.message, 'error', 8000);
+      return;
+    }
+
+    // Try to rejoin a saved session
     try {
       const rejoin = await Room.tryRejoin();
       if (rejoin) {
@@ -34,7 +40,6 @@ const App = (function () {
         if (rejoin.room.state === 'WAITING') {
           Lobby.enter(rejoin.room, rejoin.me);
         } else if (rejoin.room.state === 'FINISHED') {
-          showScreen('reveal');
           await Reveal.load(rejoin.room, {});
         } else {
           Game.enter(rejoin.room, rejoin.me);
@@ -47,64 +52,58 @@ const App = (function () {
     // Check URL hash for invite code
     const code = hashCode();
     if (code) {
-      $('#join-code-input').value = code;
-      showJoinFlow();
+      document.getElementById('join-code-input').value = code;
+      pendingAction = 'join';
+      document.getElementById('join-form').classList.remove('hidden');
+      document.getElementById('name-form').classList.add('hidden');
     }
   }
 
-  function showJoinFlow() {
-    pendingAction = 'join';
-    $('#join-form').classList.remove('hidden');
-    $('#name-form').classList.add('hidden');
-  }
-
   function bindLanding() {
-    $('#btn-create-room').onclick = () => {
+    document.getElementById('btn-create-room').onclick = () => {
       pendingAction = 'create';
       pendingCode = null;
-      $('#join-form').classList.add('hidden');
-      $('#name-form').classList.remove('hidden');
-      $('#name-input').focus();
+      document.getElementById('join-form').classList.add('hidden');
+      document.getElementById('name-form').classList.remove('hidden');
+      document.getElementById('name-input').focus();
     };
 
-    $('#btn-join-room').onclick = showJoinFlow;
+    document.getElementById('btn-join-room').onclick = () => {
+      pendingAction = 'join';
+      document.getElementById('join-form').classList.remove('hidden');
+      document.getElementById('name-form').classList.add('hidden');
+    };
 
-    $('#btn-join-confirm').onclick = () => {
-      const code = $('#join-code-input').value.trim().toUpperCase();
-      if (!code || code.length < 4) {
-        showToast('Enter a valid room code', 'error');
-        return;
-      }
+    document.getElementById('btn-join-confirm').onclick = () => {
+      const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+      if (!code || code.length < 4) { showToast('Enter a valid room code', 'error'); return; }
       pendingCode = code;
       pendingAction = 'join';
-      $('#join-form').classList.add('hidden');
-      $('#name-form').classList.remove('hidden');
-      $('#name-input').focus();
+      document.getElementById('join-form').classList.add('hidden');
+      document.getElementById('name-form').classList.remove('hidden');
+      document.getElementById('name-input').focus();
     };
 
-    $('#join-code-input').onkeydown = e => {
-      if (e.key === 'Enter') $('#btn-join-confirm').click();
+    document.getElementById('join-code-input').onkeydown = e => {
+      if (e.key === 'Enter') document.getElementById('btn-join-confirm').click();
     };
 
-    $('#btn-name-confirm').onclick = async () => {
-      const name = $('#name-input').value.trim() || 'Player';
+    document.getElementById('btn-name-confirm').onclick = async () => {
+      const name = document.getElementById('name-input').value.trim() || 'Player';
       setStoredName(name);
-      $('#btn-name-confirm').disabled = true;
+      const btn = document.getElementById('btn-name-confirm');
+      btn.disabled = true;
       try {
-        if (pendingAction === 'create') {
-          await doCreate();
-        } else if (pendingAction === 'join' && pendingCode) {
-          await doJoin(pendingCode);
-        } else {
-          showToast('Please choose Create or Join first', 'warn');
-        }
+        if (pendingAction === 'create') await doCreate();
+        else if (pendingAction === 'join' && pendingCode) await doJoin(pendingCode);
+        else showToast('Choose Create or Join first', 'warn');
       } finally {
-        $('#btn-name-confirm').disabled = false;
+        btn.disabled = false;
       }
     };
 
-    $('#name-input').onkeydown = e => {
-      if (e.key === 'Enter') $('#btn-name-confirm').click();
+    document.getElementById('name-input').onkeydown = e => {
+      if (e.key === 'Enter') document.getElementById('btn-name-confirm').click();
     };
   }
 
@@ -122,14 +121,9 @@ const App = (function () {
     try {
       const { room, me, rejoined } = await Room.join(code);
       await Realtime.subscribe(room.id, me.id);
-      if (room.state === 'WAITING') {
-        Lobby.enter(room, me);
-      } else if (room.state === 'FINISHED') {
-        showScreen('reveal');
-        await Reveal.load(room, {});
-      } else {
-        Game.enter(room, me);
-      }
+      if (room.state === 'WAITING') Lobby.enter(room, me);
+      else if (room.state === 'FINISHED') await Reveal.load(room, {});
+      else Game.enter(room, me);
       showToast(rejoined ? 'Welcome back!' : 'Joined!', 'success');
     } catch (e) {
       showToast(e.message || 'Could not join room', 'error');
@@ -138,9 +132,7 @@ const App = (function () {
 
   window.addEventListener('beforeunload', () => {
     const me = Room.getMe();
-    if (me) {
-      try { db().from('players').update({ is_connected: false }).eq('id', me.id); } catch (_) {}
-    }
+    if (me) { try { db().from('players').update({ is_connected: false }).eq('id', me.id); } catch (_) {} }
   });
 
   return { showScreen, goHome, boot };

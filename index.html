@@ -3,15 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Scribble Chain</title>
+  <title>ScribbleChain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
-  <!-- ═══════════════════════ SCREENS ═══════════════════════ -->
 
   <!-- LANDING -->
   <div id="screen-landing" class="screen active">
@@ -50,14 +48,15 @@
           <div class="room-code-wrap">
             <span class="room-code-label">Room Code</span>
             <span id="lobby-room-code" class="room-code-display">----</span>
-            <button class="btn btn-ghost btn-sm" id="btn-copy-code" title="Copy code">📋</button>
+            <button class="btn btn-ghost btn-sm" id="btn-copy-invite" title="Copy invite link">📋</button>
           </div>
           <button class="btn btn-danger btn-sm" id="btn-leave-lobby">Leave</button>
         </div>
-
+        <div class="player-count-row">
+          <span id="player-count">0</span> players
+        </div>
         <div class="player-grid" id="player-list"></div>
-
-        <div id="lobby-chat" class="chat-box">
+        <div class="chat-box">
           <div class="chat-messages" id="lobby-chat-messages"></div>
           <div class="chat-input-row">
             <input type="text" id="lobby-chat-input" class="chat-input" placeholder="Say something…" maxlength="200" />
@@ -65,10 +64,9 @@
           </div>
         </div>
       </div>
-
       <div class="lobby-sidebar">
-        <div class="settings-panel" id="settings-panel">
-          <h3 class="settings-title">Settings</h3>
+        <div class="settings-panel">
+          <h3 class="settings-title">⚙️ Settings</h3>
           <div class="setting-row">
             <label>Prompt Timer</label>
             <select id="setting-prompt-timer" class="select">
@@ -97,17 +95,14 @@
           </div>
           <div class="setting-row">
             <label>Profanity Filter</label>
-            <label class="toggle">
-              <input type="checkbox" id="setting-profanity" />
-              <span class="toggle-slider"></span>
-            </label>
+            <select id="setting-profanity" class="select">
+              <option value="0">Off</option>
+              <option value="1">On</option>
+            </select>
           </div>
         </div>
-
-        <button class="btn btn-primary btn-lg w-full" id="btn-start-game" disabled>
-          Start Game
-        </button>
-        <p class="start-hint" id="start-hint">Waiting for host to start…</p>
+        <button class="btn btn-primary btn-lg w-full" id="btn-start-game">Start Game</button>
+        <p class="start-hint">Waiting for host to start…</p>
       </div>
     </div>
   </div>
@@ -120,13 +115,14 @@
         <div class="timer-wrap">
           <svg class="timer-ring" viewBox="0 0 44 44">
             <circle class="timer-track" cx="22" cy="22" r="18"/>
-            <circle class="timer-progress" id="timer-ring-prompt" cx="22" cy="22" r="18"/>
+            <circle class="timer-progress" id="timer-ring-prompt" cx="22" cy="22" r="18"
+              style="stroke-dasharray:113;stroke-dashoffset:0"/>
           </svg>
           <span class="timer-text" id="timer-display-prompt">60</span>
         </div>
       </div>
       <div class="phase-body center-col">
-        <p class="phase-instruction" id="prompt-theme-hint">Write anything you can imagine!</p>
+        <p class="phase-instruction">Write anything you can imagine!</p>
         <textarea id="prompt-textarea" class="prompt-textarea" placeholder="A giraffe learning to skateboard…" maxlength="120" rows="3"></textarea>
         <div class="char-count"><span id="prompt-char-count">0</span>/120</div>
         <button class="btn btn-primary btn-lg" id="btn-submit-prompt">Submit Prompt ✓</button>
@@ -147,35 +143,34 @@
         <div class="timer-wrap">
           <svg class="timer-ring" viewBox="0 0 44 44">
             <circle class="timer-track" cx="22" cy="22" r="18"/>
-            <circle class="timer-progress" id="timer-ring-draw" cx="22" cy="22" r="18"/>
+            <circle class="timer-progress" id="timer-ring-draw" cx="22" cy="22" r="18"
+              style="stroke-dasharray:113;stroke-dashoffset:0"/>
           </svg>
           <span class="timer-text" id="timer-display-draw">90</span>
         </div>
       </div>
-      <div class="canvas-area">
-        <canvas id="draw-canvas" width="720" height="720"></canvas>
-      </div>
-      <div class="toolbar">
-        <div class="tool-group">
-          <button class="tool-btn active" id="tool-pen" title="Pen">🖊</button>
+      <div class="drawing-body">
+        <div class="canvas-wrap">
+          <canvas id="draw-canvas" width="720" height="720"></canvas>
+        </div>
+        <div class="toolbar">
+          <button class="tool-btn active" id="tool-pen" title="Pen">✏️</button>
           <button class="tool-btn" id="tool-eraser" title="Eraser">🧹</button>
           <button class="tool-btn" id="tool-fill" title="Fill">🪣</button>
-        </div>
-        <div class="tool-group">
-          <div class="color-swatch-grid" id="color-swatches"></div>
-          <input type="color" id="color-picker" class="color-picker-full" value="#000000" title="Custom color" />
-        </div>
-        <div class="tool-group">
-          <label class="brush-label">Size</label>
+          <div class="toolbar-sep"></div>
+          <div id="color-swatches" class="color-swatches"></div>
+          <input type="color" id="color-picker" value="#000000" title="Custom color" />
+          <div class="toolbar-sep"></div>
           <input type="range" id="brush-size" min="1" max="60" value="6" class="brush-slider" />
-          <span class="brush-preview-wrap"><canvas id="brush-preview" width="40" height="40"></canvas></span>
+          <canvas id="brush-preview" width="40" height="40" class="brush-preview"></canvas>
+          <div class="toolbar-sep"></div>
+          <button class="tool-btn" id="tool-undo" title="Undo">↩️</button>
+          <button class="tool-btn" id="tool-redo" title="Redo">↪️</button>
+          <button class="tool-btn" id="tool-clear" title="Clear">🗑️</button>
         </div>
-        <div class="tool-group">
-          <button class="tool-btn" id="tool-undo" title="Undo">↩</button>
-          <button class="tool-btn" id="tool-redo" title="Redo">↪</button>
-          <button class="tool-btn danger" id="tool-clear" title="Clear">🗑</button>
-        </div>
-        <button class="btn btn-primary btn-sm" id="btn-submit-drawing">Done ✓</button>
+      </div>
+      <div class="drawing-footer">
+        <button class="btn btn-primary btn-lg" id="btn-submit-drawing">Submit Drawing ✓</button>
       </div>
       <div class="waiting-panel hidden" id="waiting-panel-draw">
         <div class="waiting-avatars" id="waiting-avatars-draw"></div>
@@ -188,22 +183,21 @@
   <div id="screen-description" class="screen">
     <div class="phase-layout">
       <div class="phase-header">
-        <div class="phase-badge">💬 Describe This Drawing</div>
+        <div class="phase-badge">💬 Describe This</div>
         <div class="timer-wrap">
           <svg class="timer-ring" viewBox="0 0 44 44">
             <circle class="timer-track" cx="22" cy="22" r="18"/>
-            <circle class="timer-progress" id="timer-ring-desc" cx="22" cy="22" r="18"/>
+            <circle class="timer-progress" id="timer-ring-desc" cx="22" cy="22" r="18"
+              style="stroke-dasharray:113;stroke-dashoffset:0"/>
           </svg>
           <span class="timer-text" id="timer-display-desc">60</span>
         </div>
       </div>
-      <div class="phase-body">
-        <div class="desc-image-wrap">
-          <img id="desc-image" src="" alt="Drawing to describe" class="desc-image" />
-        </div>
+      <div class="phase-body center-col">
+        <img id="desc-image" class="desc-image" src="" alt="Drawing to describe" />
         <textarea id="desc-textarea" class="prompt-textarea" placeholder="Describe what you see…" maxlength="120" rows="3"></textarea>
         <div class="char-count"><span id="desc-char-count">0</span>/120</div>
-        <button class="btn btn-primary btn-lg" id="btn-submit-desc">Submit ✓</button>
+        <button class="btn btn-primary btn-lg" id="btn-submit-desc">Submit Description ✓</button>
       </div>
       <div class="waiting-panel hidden" id="waiting-panel-desc">
         <div class="waiting-avatars" id="waiting-avatars-desc"></div>
@@ -212,11 +206,11 @@
     </div>
   </div>
 
-  <!-- WAITING / TRANSITION -->
+  <!-- WAITING (spectator / transition) -->
   <div id="screen-waiting" class="screen">
-    <div class="full-center">
-      <div class="spinner-ring"></div>
-      <p class="waiting-big-text" id="waiting-big-text">Collecting submissions…</p>
+    <div class="waiting-fullscreen">
+      <div class="waiting-spinner"></div>
+      <p id="waiting-big-text" class="waiting-big-text">Please wait…</p>
     </div>
   </div>
 
@@ -224,63 +218,63 @@
   <div id="screen-reveal" class="screen">
     <div class="reveal-layout">
       <div class="reveal-header">
-        <h2 class="reveal-title">📖 The Story</h2>
-        <div class="reveal-chain-nav">
-          <span id="reveal-chain-label" class="reveal-chain-label">Chain 1 / 1</span>
+        <h2 class="reveal-title">🔗 Chain Reveal</h2>
+        <span id="reveal-chain-label" class="chain-label">Chain 1 / 1</span>
+        <div class="reveal-reactions">
+          <button class="reaction-btn" data-emoji="😂">😂 <span id="rxn-laugh">0</span></button>
+          <button class="reaction-btn" data-emoji="😲">😲 <span id="rxn-wow">0</span></button>
+          <button class="reaction-btn" data-emoji="❤️">❤️ <span id="rxn-heart">0</span></button>
         </div>
       </div>
-      <div class="reveal-chain" id="reveal-chain"></div>
-      <div class="reveal-footer">
+      <div class="reveal-body">
+        <div id="reveal-chain" class="reveal-chain"></div>
+        <div id="float-reactions" class="float-reactions"></div>
+      </div>
+      <div class="reveal-controls">
         <button class="btn btn-secondary" id="btn-prev-entry">← Prev</button>
         <button class="btn btn-primary" id="btn-next-entry">Next →</button>
+        <div id="host-reveal-controls" class="host-reveal-controls hidden">
+          <button class="btn btn-ghost" id="btn-prev-chain">◀ Chain</button>
+          <button class="btn btn-ghost" id="btn-next-chain">Chain ▶</button>
+          <button class="btn btn-danger" id="btn-finish-reveal">Finish</button>
+        </div>
       </div>
-      <div id="reveal-reactions" class="reaction-bar">
-        <button class="reaction-btn" data-emoji="😂">😂 <span class="rxn-count" id="rxn-laugh">0</span></button>
-        <button class="reaction-btn" data-emoji="😲">😲 <span class="rxn-count" id="rxn-wow">0</span></button>
-        <button class="reaction-btn" data-emoji="❤️">❤️ <span class="rxn-count" id="rxn-heart">0</span></button>
-      </div>
-      <div class="reveal-chat-wrap">
+      <div class="reveal-chat">
         <div class="chat-messages" id="reveal-chat-messages"></div>
         <div class="chat-input-row">
           <input type="text" id="reveal-chat-input" class="chat-input" placeholder="React…" maxlength="200" />
           <button class="btn btn-primary btn-sm" id="btn-reveal-chat-send">Send</button>
         </div>
       </div>
-      <div id="host-reveal-controls" class="host-controls hidden">
-        <button class="btn btn-secondary btn-sm" id="btn-prev-chain">← Prev Chain</button>
-        <button class="btn btn-primary btn-sm" id="btn-next-chain">Next Chain →</button>
-        <button class="btn btn-primary btn-sm" id="btn-finish-reveal">Finish 🎉</button>
-      </div>
     </div>
   </div>
 
   <!-- GAME OVER -->
   <div id="screen-gameover" class="screen">
-    <div class="full-center gameover-content">
-      <h2 class="gameover-title">🎉 That's a Wrap!</h2>
-      <div class="scoreboard" id="scoreboard"></div>
-      <button class="btn btn-primary btn-lg" id="btn-play-again">Play Again</button>
-      <button class="btn btn-secondary btn-lg" id="btn-back-lobby">Back to Lobby</button>
+    <div class="gameover-layout">
+      <h1 class="gameover-title">🎉 Game Over!</h1>
+      <div id="scoreboard" class="scoreboard"></div>
+      <div class="gameover-actions">
+        <button class="btn btn-primary btn-xl" id="btn-play-again">Play Again</button>
+        <button class="btn btn-secondary btn-xl" id="btn-back-lobby">Back to Lobby</button>
+      </div>
     </div>
   </div>
 
-  <!-- TOAST CONTAINER -->
-  <div id="toast-container"></div>
+  <!-- TOAST -->
+  <div id="toast-container" class="toast-container"></div>
 
-  <!-- FLOATING REACTIONS -->
-  <div id="float-reactions"></div>
-
-  <!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+  <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="scripts/config.js"></script>
-  <script src="scripts/utils.js"></script>
   <script src="scripts/supabase.js"></script>
+  <script src="scripts/utils.js"></script>
   <script src="scripts/realtime.js"></script>
+  <script src="scripts/room.js"></script>
   <script src="scripts/canvas.js"></script>
   <script src="scripts/drawing.js"></script>
-  <script src="scripts/chat.js"></script>
   <script src="scripts/settings.js"></script>
-  <script src="scripts/room.js"></script>
+  <script src="scripts/chat.js"></script>
   <script src="scripts/lobby.js"></script>
   <script src="scripts/game.js"></script>
   <script src="scripts/reveal.js"></script>

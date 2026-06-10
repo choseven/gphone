@@ -1,83 +1,92 @@
 const Chat = (function () {
+  let profanity = false;
 
-  // ── LOBBY CHAT ────────────────────────────────────────────
   function initLobby(room, me) {
-    const log = $('#lobby-chat-messages');
-    if (!log) return;
+    const log = document.getElementById('lobby-chat-messages');
+    const input = document.getElementById('lobby-chat-input');
+    const sendBtn = document.getElementById('btn-lobby-chat-send');
+    if (!log || !input || !sendBtn) return;
+
     log.innerHTML = '';
-    loadHistory(room.id, log);
 
-    const send = () => {
-      const input = $('#lobby-chat-input');
-      const body = input.value.trim();
-      if (!body) return;
-      input.value = '';
-      db().from('chat_messages').insert({ room_id: room.id, player_id: me.id, username: me.username, body });
-    };
-
-    const sendBtn = $('#btn-lobby-chat-send');
-    if (sendBtn) sendBtn.onclick = send;
-    const inp = $('#lobby-chat-input');
-    if (inp) inp.onkeydown = e => { if (e.key === 'Enter') send(); };
-
-    Realtime.on('chat', payload => {
-      if (payload.eventType === 'INSERT') appendMsg(log, payload.new);
+    Realtime.on('chat', function(payload) {
+      if (payload.new && payload.new.scope === 'lobby') {
+        appendMsg(log, payload.new, me.id, profanity);
+      }
     });
-  }
 
-  // ── REVEAL CHAT ───────────────────────────────────────────
-  function initReveal(room, me) {
-    const log = $('#reveal-chat-messages');
-    if (!log) return;
-    log.innerHTML = '';
-    loadHistory(room.id, log);
-
-    const send = () => {
-      const input = $('#reveal-chat-input');
-      const body = input.value.trim();
-      if (!body) return;
+    function send() {
+      const text = input.value.trim();
+      if (!text) return;
       input.value = '';
-      db().from('chat_messages').insert({ room_id: room.id, player_id: me.id, username: me.username, body });
-    };
-
-    const sendBtn = $('#btn-reveal-chat-send');
-    if (sendBtn) sendBtn.onclick = send;
-    const inp = $('#reveal-chat-input');
-    if (inp) inp.onkeydown = e => { if (e.key === 'Enter') send(); };
-
-    // Add a second listener for reveal log (may co-exist with lobby listener)
-    Realtime.on('chat', payload => {
-      if (payload.eventType === 'INSERT') appendMsg(log, payload.new);
-    });
-  }
-
-  async function loadHistory(roomId, log) {
-    const { data } = await db()
-      .from('chat_messages')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: true })
-      .limit(60);
-    (data || []).forEach(msg => appendMsg(log, msg));
-  }
-
-  function appendMsg(log, msg) {
-    if (!log) return;
-    const el = document.createElement('div');
-    if (msg.player_id === null && msg.username === 'system') {
-      el.className = 'chat-msg system';
-      el.textContent = msg.body;
-    } else {
-      el.className = 'chat-msg';
-      el.innerHTML = `<span class="msg-author">${escapeHtml(msg.username)}:</span> ${escapeHtml(msg.body)}`;
+      db().from('chat_messages').insert({
+        room_id: room.id,
+        player_id: me.id,
+        username: me.username,
+        avatar: me.avatar,
+        content: text,
+        scope: 'lobby'
+      }).catch(function() {});
     }
-    log.appendChild(el);
+
+    sendBtn.onclick = send;
+    input.onkeydown = function(e) { if (e.key === 'Enter') send(); };
+
+    // Load recent messages
+    db().from('chat_messages').select('*')
+      .eq('room_id', room.id).eq('scope', 'lobby')
+      .order('created_at', { ascending: true }).limit(50)
+      .then(function(res) {
+        (res.data || []).forEach(function(msg) {
+          appendMsg(log, msg, me.id, profanity);
+        });
+      });
+  }
+
+  function initReveal(room, me) {
+    const log = document.getElementById('reveal-chat-messages');
+    const input = document.getElementById('reveal-chat-input');
+    const sendBtn = document.getElementById('btn-reveal-chat-send');
+    if (!log || !input || !sendBtn) return;
+
+    log.innerHTML = '';
+
+    Realtime.on('chat_reveal', function(payload) {
+      if (payload.new && payload.new.scope === 'reveal') {
+        appendMsg(log, payload.new, me.id, profanity);
+      }
+    });
+
+    function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      db().from('chat_messages').insert({
+        room_id: room.id,
+        player_id: me.id,
+        username: me.username,
+        avatar: me.avatar,
+        content: text,
+        scope: 'reveal'
+      }).catch(function() {});
+    }
+
+    sendBtn.onclick = send;
+    input.onkeydown = function(e) { if (e.key === 'Enter') send(); };
+  }
+
+  function appendMsg(log, msg, myId, filter) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg' + (msg.player_id === myId ? ' me' : '');
+    const em = avatarFor(msg.avatar);
+    const name = msg.player_id === myId ? 'You' : escapeHtml(msg.username || 'Someone');
+    const text = cleanText(escapeHtml(msg.content || ''), filter);
+    div.innerHTML = '<span class="chat-em">' + em + '</span><span class="chat-name">' + name + ':</span> ' + text;
+    log.appendChild(div);
     log.scrollTop = log.scrollHeight;
   }
 
-  async function system(roomId, text) {
-    await db().from('chat_messages').insert({ room_id: roomId, player_id: null, username: 'system', body: text });
-  }
+  function setProfanity(v) { profanity = !!v; }
 
-  return { initLobby, initReveal, system };
+  return { initLobby, initReveal, setProfanity };
 })();

@@ -8,7 +8,6 @@ const Drawing = (function () {
     '#4d8dff','#6c4dff','#ff77c2','#8b5a2b'
   ];
 
-  // Mount the engine onto the static #draw-canvas and wire up the static toolbar
   function mount(initialData, opts) {
     opts = opts || {};
     settings = opts.settings || {};
@@ -29,87 +28,87 @@ const Drawing = (function () {
   }
 
   function buildStaticToolbar() {
-    // Tool buttons
-    const toolBtns = {
-      'tool-pen': 'brush',
-      'tool-eraser': 'eraser',
-      'tool-fill': 'fill'
-    };
-    Object.entries(toolBtns).forEach(([id, tool]) => {
-      const btn = document.getElementById(id);
+    var toolBtns = { 'tool-pen': 'brush', 'tool-eraser': 'eraser', 'tool-fill': 'fill' };
+    Object.entries(toolBtns).forEach(function(pair) {
+      var id = pair[0], tool = pair[1];
+      var btn = document.getElementById(id);
       if (!btn) return;
-      btn.onclick = () => {
+      btn.onclick = function() {
         engine.setTool(tool);
-        $$('.tool-btn', document.querySelector('.toolbar')).forEach(b => b.classList.remove('active'));
+        var toolbar = document.querySelector('.toolbar');
+        if (toolbar) {
+          toolbar.querySelectorAll('.tool-btn').forEach(function(b) { b.classList.remove('active'); });
+        }
         btn.classList.add('active');
       };
     });
 
-    // Color swatches
-    const swatchGrid = document.getElementById('color-swatches');
+    var swatchGrid = document.getElementById('color-swatches');
     if (swatchGrid) {
       swatchGrid.innerHTML = '';
-      const palette = settings.color_restrictions ? PALETTE.slice(0, 6) : PALETTE;
-      palette.forEach((color, i) => {
-        const sw = document.createElement('div');
+      var palette = settings.color_restrictions ? PALETTE.slice(0, 6) : PALETTE;
+      palette.forEach(function(color, i) {
+        var sw = document.createElement('div');
         sw.className = 'color-swatch' + (i === 0 ? ' active' : '');
         sw.style.background = color;
         sw.title = color;
-        sw.onclick = () => {
+        sw.onclick = function() {
           engine.setColor(color);
           if (engine.getTool() === 'eraser') {
             engine.setTool('brush');
-            document.getElementById('tool-pen')?.classList.add('active');
-            document.getElementById('tool-eraser')?.classList.remove('active');
+            var pen = document.getElementById('tool-pen');
+            var er = document.getElementById('tool-eraser');
+            if (pen) pen.classList.add('active');
+            if (er) er.classList.remove('active');
           }
-          $$('.color-swatch').forEach(s => s.classList.remove('active'));
-          $$('.color-picker-full').forEach(p => p.style.outline = 'none');
+          document.querySelectorAll('.color-swatch').forEach(function(s) { s.classList.remove('active'); });
+          var picker = document.getElementById('color-picker');
+          if (picker) picker.style.outline = 'none';
           sw.classList.add('active');
         };
         swatchGrid.appendChild(sw);
       });
     }
 
-    // Custom color picker
-    const picker = document.getElementById('color-picker');
+    var picker = document.getElementById('color-picker');
     if (picker) {
-      picker.oninput = () => {
+      picker.oninput = function() {
         engine.setColor(picker.value);
-        $$('.color-swatch').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.color-swatch').forEach(function(s) { s.classList.remove('active'); });
         picker.style.outline = '2px solid white';
       };
     }
 
-    // Brush size slider
-    const slider = document.getElementById('brush-size');
+    var slider = document.getElementById('brush-size');
     if (slider) {
       slider.min = settings.min_brush || 1;
       slider.max = settings.max_brush || 60;
       slider.value = 6;
-      slider.oninput = () => {
+      slider.oninput = function() {
         engine.setBrush(parseInt(slider.value, 10));
         updateBrushPreview();
       };
     }
 
-    // Undo / Redo / Clear
-    const undoBtn = document.getElementById('tool-undo');
-    if (undoBtn) undoBtn.onclick = () => engine.undo();
+    var undoBtn = document.getElementById('tool-undo');
+    if (undoBtn) undoBtn.onclick = function() { engine.undo(); };
 
-    const redoBtn = document.getElementById('tool-redo');
-    if (redoBtn) redoBtn.onclick = () => engine.redo();
+    var redoBtn = document.getElementById('tool-redo');
+    if (redoBtn) redoBtn.onclick = function() { engine.redo(); };
 
-    const clearBtn = document.getElementById('tool-clear');
-    if (clearBtn) clearBtn.onclick = () => {
-      if (confirm('Clear the whole canvas?')) engine.clear();
-    };
+    var clearBtn = document.getElementById('tool-clear');
+    if (clearBtn) {
+      clearBtn.onclick = function() {
+        if (confirm('Clear the whole canvas?')) engine.clear();
+      };
+    }
   }
 
   function updateBrushPreview() {
-    const preview = document.getElementById('brush-preview');
+    var preview = document.getElementById('brush-preview');
     if (!preview) return;
-    const ctx = preview.getContext('2d');
-    const size = parseInt(document.getElementById('brush-size')?.value || '6', 10);
+    var ctx = preview.getContext('2d');
+    var size = parseInt(document.getElementById('brush-size') && document.getElementById('brush-size').value || '6', 10);
     ctx.clearRect(0, 0, 40, 40);
     ctx.fillStyle = '#e8e8f0';
     ctx.beginPath();
@@ -120,5 +119,5 @@ const Drawing = (function () {
   function getData() { return engine ? engine.serialize() : null; }
   function getEngine() { return engine; }
 
-  return { mount, getData, getEngine };
+  return { mount: mount, getData: getData, getEngine: getEngine };
 })();
