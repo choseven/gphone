@@ -299,6 +299,17 @@
   <!-- Supabase SDK (replaces all 4 Firebase scripts) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
+  <!-- Twemoji — replaces system emojis with clean Twitter/Twemoji style -->
+  <script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js" crossorigin="anonymous"></script>
+  <script>
+    // Auto-parse all emojis in the document whenever DOM changes
+    twemoji.parse(document.documentElement, { folder: 'svg', ext: '.svg' });
+    const _twemojiObserver = new MutationObserver(() => {
+      twemoji.parse(document.documentElement, { folder: 'svg', ext: '.svg' });
+    });
+    _twemojiObserver.observe(document.body, { childList: true, subtree: true });
+  </script>
+
   <script src="js/supabase.js"></script>
   <script src="js/drawing.js"></script>
   <script src="js/lobby.js"></script>

@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════════
 //  supabase.js — replaces firebase.js entirely
-//  Drop this in js/ and delete js/firebase.js
 // ═══════════════════════════════════════════════════════════
 
 const SUPABASE_URL = 'https://xbisiqywkbagzcxbypmj.supabase.co';
@@ -26,7 +25,6 @@ function getUid() { return currentUser?.id ?? null; }
 
 // ── DB helpers ────────────────────────────────────────────
 
-// Read single row. match = { col: val, ... }
 async function dbGet(table, match = {}) {
   let q = _db.from(table).select('*');
   Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
@@ -35,7 +33,6 @@ async function dbGet(table, match = {}) {
   return data;
 }
 
-// Read multiple rows
 async function dbGetAll(table, match = {}) {
   let q = _db.from(table).select('*');
   Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
@@ -44,13 +41,11 @@ async function dbGetAll(table, match = {}) {
   return data ?? [];
 }
 
-// Insert or replace (upsert)
 async function dbSet(table, row) {
   const { error } = await _db.from(table).upsert(row);
   if (error) throw error;
 }
 
-// Update matching rows
 async function dbUpdate(table, match, updates) {
   let q = _db.from(table).update(updates);
   Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
@@ -58,14 +53,12 @@ async function dbUpdate(table, match, updates) {
   if (error) throw error;
 }
 
-// Insert new row, return it
 async function dbPush(table, row) {
   const { data, error } = await _db.from(table).insert(row).select().single();
   if (error) throw error;
   return data;
 }
 
-// Delete matching rows
 async function dbDelete(table, match) {
   let q = _db.from(table).delete();
   Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
@@ -74,16 +67,12 @@ async function dbDelete(table, match) {
 }
 
 // ── Realtime listener ─────────────────────────────────────
-// Returns an unsubscribe function.
-// Usage: FB.dbOn({ table, event, match, callback })
-// event = 'INSERT' | 'UPDATE' | 'DELETE' | '*'
-// match = { col: val } (optional, filters to one row)
 function dbOn({ table, event = '*', match, callback }) {
   let cfg = { event, schema: 'public', table };
   if (match) {
-    cfg.filter = Object.entries(match)
-      .map(([k, v]) => `${k}=eq.${v}`)
-      .join(',');
+    // Supabase only supports ONE filter per channel — use the first key
+    const [k, v] = Object.entries(match)[0];
+    cfg.filter = `${k}=eq.${v}`;
   }
   const channel = _db
     .channel(`${table}-${Math.random().toString(36).slice(2)}`)
@@ -94,19 +83,33 @@ function dbOn({ table, event = '*', match, callback }) {
 }
 
 // ── Storage ───────────────────────────────────────────────
-// Bucket name: 'drawings' (create in Supabase → Storage → New bucket, set Public)
+// FIX: use base64 upload — avoids binary encoding issues with publishable keys
 async function uploadDrawing(roomId, chainId, round, dataUrl) {
   const base64 = dataUrl.split(',')[1];
-  const bytes  = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-  const path   = `rooms/${roomId}/drawings/${chainId}/${round}.png`;
+  const path   = `rooms/${roomId}/${chainId}/${round}.png`;
 
   const { error } = await _db.storage
     .from('drawings')
-    .upload(path, bytes, { contentType: 'image/png', upsert: true });
-  if (error) throw error;
+    .upload(path, decode(base64), {
+      contentType: 'image/png',
+      upsert: true,
+    });
+
+  if (error) {
+    console.error('Storage upload error:', error);
+    throw error;
+  }
 
   const { data } = _db.storage.from('drawings').getPublicUrl(path);
   return data.publicUrl;
+}
+
+// base64 → Uint8Array without using atob on large strings (more reliable)
+function decode(base64) {
+  const binary = atob(base64);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 // ── Export ────────────────────────────────────────────────

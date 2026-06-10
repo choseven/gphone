@@ -54,7 +54,8 @@ const Game = (() => {
       settings
     });
 
-    chains = chainMap;
+    chains        = chainMap;
+    _cachedChains = chainMap;
   }
 
   // ── Sync: called when room state changes ──────────────────
@@ -496,25 +497,95 @@ const Game = (() => {
   // ═══════════════════════════════════════════════════════
   //  ROOM WATCHER
   // ═══════════════════════════════════════════════════════
+
+  // Cached players/chains so realtime callbacks don't need to re-fetch every time
+  let _cachedPlayers = {};
+  let _cachedChains  = {};
+
   function watchRoom(rId) {
     roomId   = rId;
     playerId = Lobby.getPlayerId();
 
-    // ── CHANGED: listen on rooms table, then fetch full state ──
-    const unsub = FB.dbOn({
+    // Listen for room row changes (state, round, timers)
+    const unsubRoom = FB.dbOn({
       table: 'rooms', event: 'UPDATE',
       match: { id: roomId },
       callback: async payload => {
         const roomRow = payload.new;
-        chains      = {};
-        playerOrder = roomRow.player_order || [];
+        playerOrder  = roomRow.player_order || [];
         gameSettings = roomRow.settings || {};
 
-        // Fetch players and chains to pass to sync
-        await Lobby.fetchAndSync(roomRow);
+        // Build room obj from cached data — no extra fetch needed for timer-critical path
+        const room = buildRoomObj(roomRow, _cachedPlayers, _cachedChains);
+        sync(room);
       }
     });
-    unsubFns.push(unsub);
+    unsubFns.push(unsubRoom);
+
+    // Listen for player changes separately so we keep cache fresh
+    const unsubPlayers = FB.dbOn({
+      table: 'players', event: '*',
+      match: { room_id: roomId },
+      callback: async () => {
+        const rows = await FB.dbGetAll('players', { room_id: roomId });
+        _cachedPlayers = Object.fromEntries(rows.map(p => [p.id, Lobby.normalizePlayer(p)]));
+      }
+    });
+    unsubFns.push(unsubPlayers);
+
+    // Listen for new entries so chain data stays current during game
+    const unsubEntries = FB.dbOn({
+      table: 'entries', event: 'INSERT',
+      match: null, // no filter — we filter by chain_id client-side
+      callback: async payload => {
+        const entry = payload.new;
+        if (!entry?.chain_id) return;
+        if (!_cachedChains[entry.chain_id]) return;
+        // Append entry into cache
+        _cachedChains[entry.chain_id].entries[entry.id] = entry;
+      }
+    });
+    unsubFns.push(unsubEntries);
+
+    // Do one initial fetch to warm the cache, then start watching
+    (async () => {
+      const [playerRows, chainRows] = await Promise.all([
+        FB.dbGetAll('players', { room_id: roomId }),
+        FB.dbGetAll('chains',  { room_id: roomId })
+      ]);
+      _cachedPlayers = Object.fromEntries(playerRows.map(p => [p.id, Lobby.normalizePlayer(p)]));
+
+      for (const chain of chainRows) {
+        const entries = await FB.dbGetAll('entries', { chain_id: chain.id });
+        _cachedChains[chain.id] = {
+          owner:     chain.owner_uid,
+          owner_uid: chain.owner_uid,
+          entries:   Object.fromEntries(entries.map(e => [e.id, e]))
+        };
+      }
+      chains = _cachedChains;
+    })();
+  }
+
+  // Build the room object sync() expects from a DB row + cached data
+  function buildRoomObj(roomRow, players, chainsData) {
+    return {
+      id:               roomRow.id,
+      hostId:           roomRow.host_id,
+      state:            roomRow.state,
+      round:            roomRow.round,
+      roundStartTime:   roomRow.round_start_time,
+      round_start_time: roomRow.round_start_time,
+      playerOrder:      roomRow.player_order || [],
+      player_order:     roomRow.player_order || [],
+      revealChainIdx:   roomRow.reveal_chain_idx || 0,
+      revealEntryIdx:   roomRow.reveal_entry_idx || 0,
+      reveal_chain_idx: roomRow.reveal_chain_idx || 0,
+      reveal_entry_idx: roomRow.reveal_entry_idx || 0,
+      settings:         roomRow.settings || {},
+      players:          players,
+      chains:           chainsData
+    };
   }
 
   // ── Utils ─────────────────────────────────────────────────
@@ -531,8 +602,10 @@ const Game = (() => {
   function cleanup() {
     clearTimer();
     unsubFns.forEach(fn => fn());
-    unsubFns    = [];
-    currentState = null;
+    unsubFns      = [];
+    currentState  = null;
+    _cachedPlayers = {};
+    _cachedChains  = {};
   }
 
   return {
